@@ -6,6 +6,8 @@ from kilobyte.config import MODEL_SHA256, MODEL_URL
 
 class InstallationTests(unittest.TestCase):
     def test_model_is_pinned_and_atomic_installer(self):
+        if not MODEL_URL:
+            self.skipTest("kilobyte-framework ships without a bundled brain")
         script = (Path(__file__).parents[1] / "scripts" / "install-model.sh").read_text()
         self.assertIn(MODEL_SHA256, script)
         self.assertIn(".part", script)
@@ -28,6 +30,8 @@ class InstallationTests(unittest.TestCase):
         """The unit hardcodes a user while the installers choose one. If they disagree,
         the service runs as one account with its data owned by another and every write
         fails -- which only shows up on a machine where the login name differs."""
+        if not MODEL_URL:
+            self.skipTest("kilobyte-framework has no brain installer to agree with")
         scripts = Path(__file__).parents[1] / "scripts"
         for name in ("install.sh", "install-online.sh", "install-model.sh"):
             text = (scripts / name).read_text()

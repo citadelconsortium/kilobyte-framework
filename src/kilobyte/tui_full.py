@@ -51,16 +51,23 @@ KILO_ART = (
     "╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ",
 )
 
-# Kilo, the evil-butler byte-bot — sized to the banner height. Slanted red eyes blink,
-# a bowtie sits under a sinister grin, and it all animates off the shared spinner tick so
-# the free space on the right of the wordmark stays alive.
-MASCOT = (
+# Kilo's logo — a pixelated eyeball that blinks and watches. Sized to the banner height,
+# it animates off the shared spinner tick so the free space on the right stays alive.
+EYE_OPEN = (
+    "  ▄▄▄▄▄  ",
     " ▟█████▙ ",
-    " █▖   ▗█ ",
-    " █ L R █ ",
-    " █  G  █ ",
-    " ▜█▃▃▃█▛ ",
-    "  ╲▟█▙╱  ",
+    "▐██▓▓▓██▌",
+    "▐██▓P▓██▌",
+    " ▜█████▛ ",
+    "  ▀▀▀▀▀  ",
+)
+EYE_SHUT = (
+    "         ",
+    "         ",
+    " ▁▁▁▁▁▁▁ ",
+    "▬▬▬▬▬▬▬▬▬",
+    " ▔▔▔▔▔▔▔ ",
+    "         ",
 )
 
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"       # default "thinking" spinner
@@ -302,23 +309,20 @@ class KiloApp:
         return sum(len(txt) for _, txt in segs)
 
     def _mascot(self, row: int):
-        """One row of the evil butler with blinking eyes, glinting on a beat."""
-        art = MASCOT[row] if row < len(MASCOT) else " " * 9
-        blink = (self.spin // 6) % 9 == 0
-        glint = (self.spin // 5) % 7 == 0
-        left = "\u2500" if blink else "\u25e3"   # ◣  slanted, evil
-        right = "\u2500" if blink else "\u25e2"  # ◢
-        eye_style = "class:banner.hi" if glint else "class:evil"
+        """One row of the pixel eyeball: open most of the time, a quick blink now and
+        then, with the pupil glinting red on a beat."""
+        blink = (self.spin % 44) < 3          # shut briefly, then wide open again
+        frames = EYE_SHUT if blink else EYE_OPEN
+        art = frames[row] if row < len(frames) else " " * 9
+        glint = (self.spin // 5) % 6 == 0
         segs = []
         for ch in art:
-            if ch == "L":
-                segs.append((eye_style, left))
-            elif ch == "R":
-                segs.append((eye_style, right))
-            elif ch == "G":
-                segs.append(("class:evil", "\u203f"))  # ‿ sinister grin
-            elif ch in "\u2593\u2584\u2580\u259f\u2599\u259b\u259c\u2583":
-                segs.append(("class:banner", ch))
+            if ch == "P":                       # pupil, watching
+                segs.append(("class:banner.hi" if glint else "class:evil", "\u25cf"))
+            elif ch == "\u2593":                 # ▓ iris
+                segs.append(("class:banner.hi", ch))
+            elif ch == "\u25ac":                 # ▬ closed-lid slit
+                segs.append(("class:evil", ch))
             else:
                 segs.append(("class:banner", ch))
         return segs
