@@ -103,6 +103,25 @@ class Agent:
         # therefore goes in its own message after it rather than being appended to it.
         system = SYSTEM_PROMPT + (REMOTE_SUFFIX if remote else "")
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        # Ground the model in its REAL environment so it stops guessing paths it cannot
+        # reach and stops pasting file contents instead of writing them. This is the single
+        # biggest lever against "multiple tools blocked" and lazy, describe-only answers.
+        _cwd = (cwd or self.settings.home).resolve()
+        _roots = ", ".join(str(r) for r in self.settings.allowed_roots)
+        messages.append({
+            "role": "system",
+            "content": (
+                "Your real environment right now (ground truth — trust this over any assumption):\n"
+                f"- Working directory: {_cwd}\n"
+                f"- You can read, list, search and WRITE files only within: {_roots}. Paths outside "
+                "these are rejected, so never try '/' or a parent like '/home' — search within your "
+                "roots (run pwd or system_info if unsure where you are).\n"
+                "- To create or change a file you MUST call write_file. Never paste a file's contents "
+                "in a markdown code block and treat that as done — that writes nothing.\n"
+                "- run_command executes for real. Destructive commands pause for the owner's approval; "
+                "everything else runs immediately, so just do the work."
+            ),
+        })
         # A specialist profile is added after the cached base prompt, so it does not break
         # the cacheable prefix. It pushes the small model toward evidence for this domain —
         # the framework covering the model's tendency to guess.

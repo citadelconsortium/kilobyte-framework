@@ -328,7 +328,7 @@ class KiloApp:
             ("class:stat.k", "   ⇥ tokens "), ("class:stat", f"{self.tokens}"),
             ("class:stat.k", "   effort "), ("class:stat", f"{self.effort}"),
             ("class:stat.k", "   ⬡ "),
-            ("class:kilo", self.model_name if self.model_name else ("cloud·" + self.cloud_provider if self.cloud_active else "kilo")),
+            ("class:kilo", self._short_model()),
         ]
         if self.agent_name:
             bar += [("class:stat.k", "   ◆ "), ("class:kilo", self.agent_name)]
@@ -860,6 +860,8 @@ class KiloApp:
         self._active = asyncio.current_task()
         self.tokens = self.tools_used = 0
         self._answered = False
+        self._work_split = False
+        self._had_work = False
         self.usage = {}
         self.streaming = False
         self.agent_name = ""
@@ -885,21 +887,29 @@ class KiloApp:
                 elif kind == "brain":
                     self.model_name = event.get("label", self.model_name)
                     if event.get("location") == "cloud":
-                        self._append(f"☁ escalated to {event.get('label')}\n")
+                        self._open_box()
+                        self._bline(f"\u2601 escalated to {event.get('label')}")
+                        self._had_work = True
                 elif kind == "agent":
                     self.agent_name = event.get("profile", "")
+                    self._open_box()
+                    self._bline(f"\u25c7 orchestrator \u2192 {event.get('profile','')} agent")
+                    self._had_work = True
                 elif kind == "warming":
                     self.phase = "warming cache (one-off)"
-                    self._append("⏳ warming the prompt cache — one-off after a change\n")
+                    self._open_box()
+                    self._bline("\u23f3 warming the prompt cache (one-off after a change)")
+                    self._had_work = True
                 elif kind == "thinking":
                     self.phase = "thinking"
                     self.streaming = False
                 elif kind == "token":
-                    if not self._answered:
-                        label = f"\u2601 {self.cloud_provider}" if self.cloud_active else "Kilo"
-                        self._append("\n" + self._rule(label) + "\n")
-                        self._answered = True
-                        self._line_buf = ""
+                    self._open_box()
+                    if self._had_work and not self._work_split:
+                        # a faint divider separates the work section from the reply
+                        self._flush_boxed()
+                        self._bline("\u2508" * max(4, self._cw() - 4))
+                        self._work_split = True
                     self.streaming = True
                     self.tokens += 1
                     self._stream_boxed(event.get("text", ""))
@@ -909,10 +919,13 @@ class KiloApp:
                     self.streaming = False
                     args = event.get("arguments") or {}
                     detail = ", ".join(f"{k}={str(v)[:32]}" for k, v in list(args.items())[:2])
+                    self._open_box()
                     self._flush_boxed()
                     self._bline(f"\u25c8 {event['name']} {detail}")
+                    self._had_work = True
                 elif kind == "tool_end":
                     ok = "✓" if event.get("ok") else "!"
+                    self._open_box()
                     self._bline(f"{ok} {event.get('name')} \u00b7 {str(event.get('summary',''))[:90]}")
                     self.phase = "interpreting"
                 elif kind == "error":
@@ -939,6 +952,28 @@ class KiloApp:
             self.phase = ""
             self._append("\n")
             self.app.invalidate()
+
+    def _open_box(self) -> None:
+        """Open Kilo's response box exactly once, so every part of his turn — escalation
+        notices, agent hand-offs, tool work, and the reply — renders INSIDE his border,
+        never floating under the owner's input box."""
+        if self._answered:
+            return
+        label = f"\u2601 {self.cloud_provider}" if self.cloud_active else "Kilo"
+        self._append("\n" + self._rule(label) + "\n")
+        self._answered = True
+        self._work_split = False
+        self._line_buf = ""
+
+    def _short_model(self) -> str:
+        """A compact brain label for the status bar so long cloud ids never crowd it."""
+        name = self.model_name or (("cloud\u00b7" + self.cloud_provider) if self.cloud_active else "kilo")
+        name = name.replace(":free", "")
+        if "/" in name:
+            name = name.rsplit("/", 1)[-1]
+        elif ":" in name and not name.startswith("cloud"):
+            name = name.split(":", 1)[-1]
+        return (name[:20] + "\u2026") if len(name) > 21 else name
 
     async def _ask_permission(self, event: dict) -> tuple[bool, bool]:
         """Ask the owner to approve a risky action. Type 1 (yes), 2 (yes, all this
