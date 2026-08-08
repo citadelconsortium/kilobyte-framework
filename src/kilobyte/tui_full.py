@@ -807,6 +807,18 @@ class KiloApp:
                          "Download a GGUF first, then run /gguf again. \u2014\n")
             return
         self._gguf_options = files
+        free_gb = 0.0
+        try:
+            for _ln in Path('/proc/meminfo').read_text().splitlines():
+                if _ln.startswith('MemAvailable'):
+                    free_gb = int(_ln.split()[1]) / 1024 / 1024
+                    break
+        except Exception:
+            pass
+        self._append(
+            f'\n\u26a0 Only load a model your machine can run. This box has about '
+            f'{free_gb:.1f} GB free RAM - a GGUF larger than that will fail to load or run '
+            'unusably slow. A bad load auto-rolls-back to the previous brain.\n')
         lines = ["\n\U0001f4e6 pick a GGUF to load as the brain \u2014 type its number:"]
         for i, f in enumerate(files, 1):
             mb = os.path.getsize(f) // (1024 * 1024)
