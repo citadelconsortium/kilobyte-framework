@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # One-line installer entry point:
-# curl -fsSL https://raw.githubusercontent.com/citadelconsortium/kilobyte/main/scripts/install-online.sh | bash
-REPO_URL="${KILOBYTE_REPO_URL:-https://github.com/citadelconsortium/kilobyte}"
+# curl -fsSL https://raw.githubusercontent.com/citadelconsortium/kilobyte-framework/main/scripts/install-online.sh | bash
+REPO_URL="${KILOBYTE_REPO_URL:-https://github.com/citadelconsortium/kilobyte-framework}"
 BRANCH="${KILOBYTE_BRANCH:-main}"
 # Must match install.sh and install-model.sh: the service account, not the person
 # running the installer. Using the login user here left the service running as one
@@ -22,4 +22,4 @@ ROOT="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d -name '*-'"$BRANCH" -print 
 sudo KILOBYTE_USER="$OWNER" "$ROOT/scripts/install.sh"
 sudo KILOBYTE_USER="$OWNER" "$ROOT/scripts/install-model.sh"
 sudo systemctl restart kilobyte.service
-echo "Kilobyte installed. Run: kilo"
+echo "Kilobyte Framework installed. Run: kilo (then /cloud or /gguf)"
