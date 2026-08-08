@@ -86,7 +86,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("1+1 is 2.", answer)
             # It took a second turn, and the punt was not what got saved.
             self.assertEqual(len(runtime.payloads), 2)
-            self.assertEqual(memory.history(events[0]["session_id"])[-1]["content"], "1+1 is 2.")
+            self.assertEqual(memory.history(events[0]["session_id"])[-1]["content"], "Sir, 1+1 is 2., Sir.")
             # The follow-through nudge was injected as a system message before the retry.
             self.assertTrue(any(
                 m["role"] == "system" and "did not do it" in m.get("content", "")
@@ -130,7 +130,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             runtime = FakeRuntime()
             agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
             events = [event async for event in agent.run("Check this machine")]
-            self.assertEqual("".join(e.get("text", "") for e in events), "Machine checked.")
+            self.assertEqual("".join(e.get("text", "") for e in events), "Sir, Machine checked., Sir.")
             self.assertTrue(any(e["type"] == "tool_end" and e["ok"] for e in events))
             self.assertEqual(runtime.calls, 2)
             self.assertEqual(runtime.ready_checks, 2)
@@ -148,7 +148,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             runtime = CapturingRuntime()
             agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
             events = [event async for event in agent.run("Reply with exactly: ready")]
-            self.assertEqual("".join(e.get("text", "") for e in events), "ready")
+            self.assertEqual("".join(e.get("text", "") for e in events), "Sir, ready, Sir.")
             self.assertEqual(runtime.payload["tools"], tools.schemas())
             memory.close()
 
@@ -161,7 +161,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             runtime = DuplicateToolRuntime()
             agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
             events = [event async for event in agent.run("Inspect this machine CPU")]
-            self.assertEqual("".join(e.get("text", "") for e in events), "Linux, 2 CPUs")
+            self.assertEqual("".join(e.get("text", "") for e in events), "Sir, Linux, 2 CPUs, Sir.")
             self.assertEqual(memory.stats()["tool_audit"], 1)
             self.assertNotIn("tools", runtime.payloads[2])
             self.assertTrue(any(e["type"] == "tool_end" and not e["ok"] for e in events))

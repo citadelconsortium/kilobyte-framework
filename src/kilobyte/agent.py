@@ -179,6 +179,9 @@ class Agent:
         # answer. One follow-through nudge turns that into either the tool call or the real
         # answer; bounded to a single retry so it can never loop.
         nudged = False
+        # Framework-enforced address: the turn opens with 'Sir,' and closes with
+        # ', Sir.' no matter how weak the brain is. See the wrap points below.
+        sir_started = False
 
         # Escalation is per request and only ever because it was asked for. A cloud
         # provider is never selected automatically, and never as a fallback when the
@@ -236,6 +239,10 @@ class Agent:
                     content = delta.get("content")
                     if content:
                         content_parts.append(content)
+                        if not sir_started and content.strip():
+                            sir_started = True
+                            if not content.lstrip()[:3].lower().startswith("sir"):
+                                yield {"type": "token", "text": "Sir, "}
                         yield {"type": "token", "text": content}
                     for call in delta.get("tool_calls") or []:
                         index = int(call.get("index", 0))
@@ -268,7 +275,14 @@ class Agent:
                     })
                     yield {"type": "thinking"}
                     continue
-                self.memory.add_message(session_id, "assistant", content)
+                final = content or ""
+                if final.strip() and not final.lstrip()[:3].lower().startswith("sir"):
+                    final = "Sir, " + final.lstrip()
+                _tail = final.rstrip().rstrip(".!?\u2026 ").rstrip()
+                if _tail and not _tail.lower().endswith("sir"):
+                    yield {"type": "token", "text": ", Sir."}
+                    final = final.rstrip() + ", Sir."
+                self.memory.add_message(session_id, "assistant", final)
                 yield {"type": "done", "session_id": session_id, "usage": usage or {}}
                 return
 

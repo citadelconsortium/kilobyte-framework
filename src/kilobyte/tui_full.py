@@ -51,6 +51,18 @@ KILO_ART = (
     "╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ",
 )
 
+# Kilo, the evil-butler byte-bot — sized to the banner height. Slanted red eyes blink,
+# a bowtie sits under a sinister grin, and it all animates off the shared spinner tick so
+# the free space on the right of the wordmark stays alive.
+MASCOT = (
+    " ▟█████▙ ",
+    " █▖   ▗█ ",
+    " █ L R █ ",
+    " █  G  █ ",
+    " ▜█▃▃▃█▛ ",
+    "  ╲▟█▙╱  ",
+)
+
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"       # default "thinking" spinner
 MOON = "◐◓◑◒"                    # a tool is running: a turning quarter
 ELLIPSIS = ("·  ", "·· ", "···", " ··", "  ·")  # "interpreting" drift
@@ -66,7 +78,8 @@ def _phase_frames(phase: str) -> str:
 
 STYLE = Style.from_dict({
     "banner": "#3fa869 bold",
-    "banner.hi": "#d7ffd7 bold",   # the bright band that sweeps across the wordmark
+    "banner.hi": "#d7ffd7 bold",
+    "evil": "#ff5f5f bold",   # the butler's eyes   # the bright band that sweeps across the wordmark
     "tagline": "#8a8a8a",
     "on": "#5fd787 bold",
     "off": "#ffd75f bold",
@@ -284,6 +297,32 @@ class KiloApp:
         out.append(("class:banner", "   "))
         return out
 
+    @staticmethod
+    def _seg_len(segs) -> int:
+        return sum(len(txt) for _, txt in segs)
+
+    def _mascot(self, row: int):
+        """One row of the evil butler with blinking eyes, glinting on a beat."""
+        art = MASCOT[row] if row < len(MASCOT) else " " * 9
+        blink = (self.spin // 6) % 9 == 0
+        glint = (self.spin // 5) % 7 == 0
+        left = "\u2500" if blink else "\u25e3"   # ◣  slanted, evil
+        right = "\u2500" if blink else "\u25e2"  # ◢
+        eye_style = "class:banner.hi" if glint else "class:evil"
+        segs = []
+        for ch in art:
+            if ch == "L":
+                segs.append((eye_style, left))
+            elif ch == "R":
+                segs.append((eye_style, right))
+            elif ch == "G":
+                segs.append(("class:evil", "\u203f"))  # ‿ sinister grin
+            elif ch in "\u2593\u2584\u2580\u259f\u2599\u259b\u259c\u2583":
+                segs.append(("class:banner", ch))
+            else:
+                segs.append(("class:banner", ch))
+        return segs
+
     def _banner_text(self):
         online = bool(self.status.get("healthy"))
         prof = self.status.get("profile") or {}
@@ -299,9 +338,15 @@ class KiloApp:
             [("class:tagline", "made by 0v3r51ght  ·  /help · F2 runtime · Ctrl-Q quit")],
         ]
         rows: list[tuple[str, str]] = []
+        show_mascot = self._cw() >= 90  # only when there is genuine free space
         for i, art in enumerate(KILO_ART):
             rows += self._shimmer(art, i)
-            rows += info[i] if i < len(info) else []
+            line = info[i] if i < len(info) else []
+            rows += line
+            if show_mascot:
+                pad = max(2, 48 - self._seg_len(line))
+                rows.append(("class:banner", " " * pad))
+                rows += self._mascot(i)
             rows.append(("", "\n"))
         return rows
 
