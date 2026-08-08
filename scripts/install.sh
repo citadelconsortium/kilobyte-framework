@@ -5,7 +5,20 @@ if [[ "$EUID" -ne 0 ]]; then
     echo "Run with sudo: sudo ./scripts/install.sh" >&2
     exit 1
 fi
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Self-bootstrap: when run via  curl ... | sudo bash  there is no checkout on disk,
+# so clone the repo to /opt and re-exec this script from there. A normal ./scripts/
+# run already has the tree and skips this.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
+if [[ -z "$ROOT" || ! -f "$ROOT/src/kilobyte/__init__.py" ]]; then
+    if ! command -v git >/dev/null; then
+        command -v pacman >/dev/null && pacman -Sy --noconfirm git             || { command -v apt-get >/dev/null && apt-get update && apt-get install -y git; }
+    fi
+    DEST="/opt/kilobyte-framework"
+    rm -rf "$DEST"
+    git clone --depth 1 https://github.com/citadelconsortium/kilobyte-framework "$DEST"
+    exec bash "$DEST/scripts/install.sh" "$@"
+fi
 # Default to a dedicated service account. Kilobyte runs unattended from boot, so it
 # should not depend on a login user existing, and the model should not be reachable
 # through a human account's permissions.
