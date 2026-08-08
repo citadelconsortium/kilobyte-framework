@@ -1,0 +1,12 @@
+{
+  "default": "openrouter",
+  "providers": {
+    "openrouter": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "PASTE_OPENROUTER_KEY_HERE",
+      "model": "anthropic/claude-sonnet-4.5",
+      "timeout": 120,
+      "enabled": true
+    }
+  }
+}

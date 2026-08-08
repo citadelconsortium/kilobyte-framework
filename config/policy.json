@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "filesystem.write": "ask",
+    "terminal.execute": "ask"
+  }
+}
+

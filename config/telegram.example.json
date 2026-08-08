@@ -1,0 +1,5 @@
+{
+  "token": "PASTE_BOT_TOKEN_HERE",
+  "allowed_chat_ids": [123456789]
+}
+

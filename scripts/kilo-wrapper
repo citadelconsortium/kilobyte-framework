@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+export PYTHONPATH="/opt/kilobyte/app/src${PYTHONPATH:+:$PYTHONPATH}"
+exec /usr/bin/python -m kilobyte.cli "$@"
+

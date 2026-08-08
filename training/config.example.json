@@ -1,0 +1,48 @@
+{
+  "base_model": "unsloth/Qwen2.5-1.5B-Instruct",
+  "_base_model_note": "~1.5B, Apache-2.0, strong coding and tool-calling for its size, well supported by Unsloth. Qwen3-1.7B is an alternative that matches the current runtime base; either yields one canonical kilobyte.gguf.",
+  "max_seq_len": 4096,
+  "lora": {
+    "r": 32,
+    "alpha": 32,
+    "dropout": 0.0,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  },
+  "train": {
+    "epochs": 3,
+    "learning_rate": 0.0002,
+    "warmup_ratio": 0.03,
+    "weight_decay": 0.01,
+    "lr_scheduler": "cosine",
+    "per_device_batch_size": 2,
+    "grad_accum": 8,
+    "load_in_4bit": true,
+    "bf16": true,
+    "gradient_checkpointing": true,
+    "packing": true,
+    "optim": "adamw_8bit",
+    "seed": 3407,
+    "save_steps": 200,
+    "eval_ratio": 0.05
+  },
+  "quantisation": "Q4_K_M",
+  "output_name": "kilobyte-candidate.gguf",
+  "kaggle": {
+    "username": "PASTE_KAGGLE_USERNAME",
+    "dataset_slug": "kilobyte-sft",
+    "notebook_slug": "kilobyte-train",
+    "enable_gpu": true,
+    "enable_internet": false,
+    "model_sources": [
+      "qwen-lm/qwen2.5/transformers/1.5b-instruct/1"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+[Unit]
+Description=Kilobyte local-first AI daemon
+Documentation=https://github.com/local/kilobyte
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kilobyte
+Group=kilobyte
+Environment=PYTHONPATH=/opt/kilobyte/app/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python -m kilobyte.daemon
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+TimeoutStopSec=60
+RuntimeDirectory=kilobyte
+RuntimeDirectoryMode=0750
+StateDirectory=kilobyte
+StateDirectoryMode=0750
+LogsDirectory=kilobyte
+LogsDirectoryMode=0750
+UMask=0027
+NoNewPrivileges=false
+PrivateDevices=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=false
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.coverage
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+
+
+# Training pipeline: never commit credentials, datasets or model artifacts
+training/config.json
+training/data/
+training/output/
+kaggle.json
+*.gguf
+.venv/
