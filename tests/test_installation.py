@@ -43,7 +43,11 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("s/^User=.*/User=$KILO_USER/", install)
         self.assertIn("s/^Group=.*/Group=$KILO_GROUP/", install)
 
+    def test_online_installer_bootstraps_this_repository(self):
+        script = (Path(__file__).parents[1] / "scripts" / "install-online.sh").read_text()
+        self.assertIn("citadelconsortium/kilobyte-framework", script)
+        self.assertNotIn("citadelconsortium/kilobyte}", script)
+
 
 if __name__ == "__main__":
     unittest.main()
-

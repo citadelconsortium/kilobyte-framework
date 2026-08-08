@@ -30,7 +30,11 @@ if command -v pacman >/dev/null; then
     pacman -Sy --needed --noconfirm llama-cpp python python-prompt_toolkit curl sqlite ripgrep
 fi
 command -v python >/dev/null
-command -v llama-server >/dev/null || { echo "Install llama-cpp first." >&2; exit 1; }
+# The framework is deliberately brain-free: cloud mode works without a local
+# runtime, while /gguf uses llama-server when the operator supplies one.
+if ! command -v llama-server >/dev/null; then
+    echo "note: llama-server not found; install llama-cpp before using a local GGUF (cloud mode remains available)."
+fi
 # The TUI needs prompt_toolkit. Prefer the distro package (installed above); fall back to
 # pip so a non-Arch host still gets a working interface.
 if ! python -c "import prompt_toolkit" 2>/dev/null; then
@@ -70,4 +74,3 @@ fi
 systemctl daemon-reload
 systemctl enable kilobyte.service
 echo "Application installed. Next: sudo KILOBYTE_USER=$KILO_USER ./scripts/install-model.sh"
-
