@@ -62,6 +62,7 @@ class TerminalUI:
     def __init__(self, client: RPCClient):
         self.client = client
         self.session_id: str | None = None
+        self.fresh_session = False
         self.model_name: str | None = None
         # Set only for the next message, by /cloud. Escalation is never sticky.
         self.provider: str | None = None
@@ -194,7 +195,8 @@ class TerminalUI:
 
     async def ask(self, text: str) -> None:
         reader, writer = await asyncio.open_unix_connection(self.client.socket_path)
-        request: dict[str, Any] = {"command": "chat", "text": text, "session_id": self.session_id, "cwd": str(Path.cwd())}
+        request: dict[str, Any] = {"command": "chat", "text": text, "session_id": self.session_id, "cwd": str(Path.cwd()), "fresh": self.fresh_session}
+        self.fresh_session = False
         if self.provider is not None:
             request["provider"] = self.provider
         writer.write((json.dumps(request) + "\n").encode())
@@ -359,6 +361,7 @@ class TerminalUI:
                 return
             if text == "/new":
                 self.session_id = None
+                self.fresh_session = True
                 self._panel("session", PURPLE, [f"{DIM}new session started; previous context is not carried over{RESET}"])
                 continue
             if text == "/help":

@@ -86,6 +86,7 @@ class Agent:
         effort: str | None = None,
         agent_profile: str | None = None,
         private: bool = False,
+        fresh: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         # Effort trades answer length and tool-step budget for speed. On slow hardware a
         # shorter reply is faster, so this is a direct latency lever, not just verbosity.
@@ -129,7 +130,7 @@ class Agent:
         if profile.name != "general":
             messages.append({"role": "system", "content": profile.instructions})
             yield {"type": "agent", "profile": profile.name, "hint": profile.hint}
-        facts = self.memory.recall(text)
+        facts = [] if fresh else self.memory.recall(text)
         if facts:
             messages.append({
                 "role": "system",
@@ -140,7 +141,7 @@ class Agent:
         # from past sessions are surfaced here automatically — the framework guaranteeing
         # cross-session memory rather than hoping the model reaches for it. Only other
         # sessions are drawn from, so the current turn cannot echo itself back.
-        recalled = [
+        recalled = [] if fresh else [
             m for m in self.memory.search_messages(text, limit=6)
             if m.get("session_id") != session_id and (m.get("content") or "").strip()
         ][:3]
