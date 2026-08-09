@@ -96,7 +96,86 @@ class InlineToolRuntime:
             yield {"delta": {"content": "Research complete."}}
 
 
+class ResearchGateRuntime:
+    """Ignore research twice; the framework must keep driving through both tools."""
+
+    def __init__(self):
+        self.calls = 0
+        self.payloads = []
+
+    async def ensure_ready(self):
+        pass
+
+    async def chat_stream(self, payload):
+        self.calls += 1
+        self.payloads.append([dict(m) for m in payload["messages"]])
+        if self.calls == 1:
+            yield {"delta": {"content": "I can answer from memory."}}
+        elif self.calls == 2:
+            yield {"delta": {"tool_calls": [{
+                "index": 0,
+                "id": "search-1",
+                "function": {"name": "web_search", "arguments": '{"query":"Kilo"}'},
+            }]}}
+        elif self.calls == 3:
+            yield {"delta": {"content": "The search snippet is enough."}}
+        elif self.calls == 4:
+            yield {"delta": {"tool_calls": [{
+                "index": 0,
+                "id": "fetch-1",
+                "function": {"name": "web_fetch", "arguments": '{"url":"https://example.com"}'},
+            }]}}
+        else:
+            yield {"delta": {"content": "Verified result with source: https://example.com"}}
+
+
+class FakeResearchTools:
+    def __init__(self):
+        self.calls = []
+
+    def schemas(self, remote=False, request=None):
+        del remote, request
+        return [
+            {"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}},
+            {"type": "function", "function": {"name": "web_fetch", "parameters": {"type": "object"}}},
+        ]
+
+    async def execute(self, name, arguments, context):
+        del context
+        self.calls.append((name, arguments))
+        if name == "web_search":
+            return {"results": [{"url": "https://example.com", "title": "Primary"}]}
+        return {"url": arguments["url"], "content": "verified source text"}
+
+
 class AgentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_research_must_search_fetch_and_clear_unfinished_answers(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            settings = Settings(data_dir=root, config_dir=root, runtime_dir=root, log_dir=root, home=root)
+            memory = MemoryStore(root / "memory.db")
+            runtime = ResearchGateRuntime()
+            tools = FakeResearchTools()
+            agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
+            events = [event async for event in agent.run("research Kilo", remote=True)]
+
+            visible = []
+            for event in events:
+                if event["type"] == "response_reset":
+                    visible.clear()
+                elif event["type"] == "token":
+                    visible.append(event.get("text", ""))
+            answer = "".join(visible)
+            self.assertNotIn("answer from memory", answer)
+            self.assertNotIn("snippet is enough", answer)
+            self.assertIn("Verified result", answer)
+            self.assertEqual([name for name, _ in tools.calls], ["web_search", "web_fetch"])
+            self.assertEqual(runtime.calls, 5)
+            self.assertGreaterEqual(
+                sum(event["type"] == "response_reset" for event in events), 2
+            )
+            memory.close()
+
     def test_inline_parser_allows_only_current_interface_tools(self):
         raw = (
             '<tool_call><function=web_search><parameter=query>"citadel" research'
@@ -152,7 +231,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             ))
             memory.close()
 
-    async def test_nudge_happens_at_most_once(self):
+    async def test_repeated_punts_are_never_accepted_as_completion(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             settings = Settings(data_dir=root, config_dir=root, runtime_dir=root, log_dir=root, home=root)
@@ -173,9 +252,18 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             runtime = AlwaysPunts()
             agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
             events = [event async for event in agent.run("do the thing")]
-            # Nudged once, then accepted — not an infinite loop.
-            self.assertEqual(runtime.calls, 2)
-            self.assertTrue(any(e["type"] == "done" for e in events))
+            # Three bounded retries, then a truthful failure — not an infinite loop and
+            # never an unfinished promise presented as the result.
+            self.assertEqual(runtime.calls, 4)
+            self.assertTrue(any(e.get("task_failed") for e in events))
+            visible = []
+            for event in events:
+                if event["type"] == "response_reset":
+                    visible.clear()
+                elif event["type"] == "token":
+                    visible.append(event.get("text", ""))
+            self.assertNotIn("let me check", "".join(visible).lower())
+            self.assertIn("did not complete", "".join(visible).lower())
             memory.close()
 
 

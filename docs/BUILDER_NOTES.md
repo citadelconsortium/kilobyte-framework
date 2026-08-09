@@ -56,6 +56,9 @@ It collapses provider whitespace outside code, safely splits long formatted mess
 reports context for the active route instead of reusing the local 8192-token value in cloud
 mode. Providers that do not advertise a limit are labelled `provider-managed`.
 `/cancel` and the Stop button cancel only that chat's tracked active/queued tasks.
+Research-profile turns require successful `web_search` and `web_fetch` calls before an
+answer is accepted. Intermediate planning and promise text is reset from clients; repeated
+general non-performance is reported as failure instead of false completion.
 The live stats bar intentionally omits the user's request text so status indicators stay
 compact; it shows phase, request count, tools, tokens, model, queue, and context instead.
 The animated context meter is local-only; cloud mode omits context from the status bar.
@@ -66,7 +69,7 @@ Past-chat selectors include local date/time. OpenRouter free-model discovery acc
 
 ## Verification and limits
 
-The full suite is 137 tests and passes. The Framework installer is intentionally
+The full suite is 138 tests and passes. The Framework installer is intentionally
 usable without `llama-server` for cloud-only operation. Local GGUF performance is
 bounded by the target machine; advanced coding/security work should use capable
 hardware or an explicitly selected cloud model. Keep the security profile and

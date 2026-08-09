@@ -37,9 +37,17 @@ _PUNT_TAILS: tuple[str, ...] = (
     "i'll look",
     "i'll compute",
     "i'll find",
+    "i'll research",
+    "i'll investigate",
+    "i'll verify",
+    "i'll gather",
+    "i'll report back",
     "i will calculate",
     "i will check",
     "i will look",
+    "i will research",
+    "i will investigate",
+    "i will verify",
     "i'm going to",
     "i am going to",
     "let's calculate",
@@ -53,6 +61,8 @@ _PUNT_TAILS: tuple[str, ...] = (
     "calculating",
     "computing",
     "checking now",
+    "researching now",
+    "investigating now",
 )
 
 _INLINE_TOOL_BLOCK_RE = re.compile(
@@ -301,9 +311,16 @@ class Agent:
         seen_calls: set[tuple[str, str]] = set()
         # A small model sometimes replies with only the *intent* to act ("let me
         # calculate…") and no tool call, so the loop would accept that promise as the
-        # answer. One follow-through nudge turns that into either the tool call or the real
-        # answer; bounded to a single retry so it can never loop.
-        nudged = False
+        # answer. Bounded follow-through nudges turn it into either the tool call or the
+        # real answer without creating an unbounded loop.
+        follow_through_nudges = 0
+        # Research is an evidence-bearing task, not a prose style. The framework therefore
+        # refuses to accept a research-profile answer until this turn has actually searched
+        # and opened a source successfully. This catches models that ignore the tool schema,
+        # answer from memory, or stop after saying that they are about to research.
+        research_required = profile.name in {"research", "private"}
+        research_nudges = 0
+        successful_tools: set[str] = set()
         inline_nudged = False
         # Framework-enforced address: the turn opens with 'Sir,' and closes with
         # ', Sir.' no matter how weak the brain is. See the wrap points below.
@@ -430,6 +447,13 @@ class Agent:
                 content = clean
                 if not tool_calls:
                     tool_calls = recovered
+            if tool_calls and emitted_this_step:
+                # Content emitted alongside a tool call is intermediate narration. Remove
+                # it from streaming clients so the eventual final answer is one clean reply,
+                # not "let me check" followed by an unrelated-looking result.
+                yield {"type": "response_reset"}
+                emitted_this_step = False
+                sir_started = False
             assistant: dict[str, Any] = {
                 "role": "assistant",
                 "content": content or None,
@@ -456,25 +480,95 @@ class Agent:
                             ),
                         }
                     )
+                    if emitted_this_step:
+                        yield {"type": "response_reset"}
+                        emitted_this_step = False
+                        sir_started = False
                     yield {"type": "thinking"}
                     continue
+                if research_required:
+                    missing = [
+                        name
+                        for name in ("web_search", "web_fetch")
+                        if name not in successful_tools
+                    ]
+                    if missing and research_nudges < 3:
+                        research_nudges += 1
+                        next_tool = missing[0]
+                        instruction = (
+                            "This is a research request, but no search has succeeded yet. "
+                            "Call web_search now with the user's actual topic."
+                            if next_tool == "web_search"
+                            else "The search is complete, but you have not opened a source. Call "
+                            "web_fetch now on the best primary or authoritative result URL."
+                        )
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    instruction
+                                    + " Do not answer from memory or announce what you will do; "
+                                    "perform the tool call and then finish with the sourced result."
+                                ),
+                            }
+                        )
+                        if emitted_this_step:
+                            yield {"type": "response_reset"}
+                            emitted_this_step = False
+                            sir_started = False
+                        yield {"type": "thinking"}
+                        continue
+                    if missing:
+                        # Never dress an unresearched model answer up as completed research.
+                        if emitted_this_step:
+                            yield {"type": "response_reset"}
+                            emitted_this_step = False
+                            sir_started = False
+                        failure = (
+                            "Sir, I could not complete verified web research because "
+                            + ", ".join(missing)
+                            + " did not complete successfully. Please retry; I have not substituted "
+                            "an answer from memory, Sir."
+                        )
+                        yield {"type": "token", "text": failure}
+                        self.memory.add_message(session_id, "assistant", failure)
+                        yield {"type": "done", "session_id": session_id, "research_failed": True}
+                        return
                 # The model stopped without calling a tool. If it only announced an action
-                # instead of delivering one, push it once to actually finish rather than
-                # recording the promise as the answer.
-                if not nudged and _looks_like_punt(content):
-                    nudged = True
-                    messages.append(
-                        {
-                            "role": "system",
-                            "content": (
-                                "You described what you were about to do but did not do it. Do not "
-                                "narrate intent. If a tool is needed, call it now; otherwise give the "
-                                "final answer now, directly."
-                            ),
-                        }
+                # instead of delivering one, push it to actually finish rather than recording
+                # the promise as the answer. Retries are bounded, but a second promise is not
+                # accepted as a completed task.
+                if _looks_like_punt(content):
+                    if follow_through_nudges < 3:
+                        follow_through_nudges += 1
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You described what you were about to do but did not do it. Do not "
+                                    "narrate intent. If a tool is needed, call it now; otherwise give the "
+                                    "final answer now, directly."
+                                ),
+                            }
+                        )
+                        if emitted_this_step:
+                            yield {"type": "response_reset"}
+                            emitted_this_step = False
+                            sir_started = False
+                        yield {"type": "thinking"}
+                        continue
+                    if emitted_this_step:
+                        yield {"type": "response_reset"}
+                    failure = (
+                        "Sir, I did not complete that task: the selected model repeatedly "
+                        "stopped after announcing work instead of performing it. No unfinished "
+                        "promise has been recorded as a result. Please retry or select another "
+                        "model, Sir."
                     )
-                    yield {"type": "thinking"}
-                    continue
+                    yield {"type": "token", "text": failure}
+                    self.memory.add_message(session_id, "assistant", failure)
+                    yield {"type": "done", "session_id": session_id, "task_failed": True}
+                    return
                 final = content or ""
                 if final.strip() and not final.lstrip()[:3].lower().startswith("sir"):
                     final = "Sir, " + final.lstrip()
@@ -533,6 +627,7 @@ class Agent:
                         "ok": True,
                         "summary": json.dumps(result, ensure_ascii=False)[:500],
                     }
+                    successful_tools.add(name)
                 except Exception as exc:
                     output = json.dumps({"error": str(exc)}, ensure_ascii=False)
                     yield {
