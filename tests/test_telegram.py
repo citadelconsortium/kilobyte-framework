@@ -221,6 +221,43 @@ class TelegramCommandTests(IsolatedAsyncioTestCase):
 
 
 class TelegramConcurrencyTests(IsolatedAsyncioTestCase):
+    async def test_cancel_stops_only_this_chats_active_work(self):
+        import asyncio
+
+        started = asyncio.Event()
+
+        class SlowAgent:
+            def run(self, *args, **kwargs):
+                async def generate():
+                    started.set()
+                    await asyncio.sleep(30)
+                    yield {"type": "token", "text": "late"}
+
+                return generate()
+
+        with tempfile.TemporaryDirectory() as raw:
+            bridge = TelegramBridge(
+                _config(raw, {"token": "secret", "allowed_chat_ids": [42]}),
+                SlowAgent(),
+            )  # type: ignore[arg-type]
+            sent: list[str] = []
+
+            async def capture(token, chat_id, text, keyboard=None):
+                sent.append(text)
+
+            async def noop(*args, **kwargs):
+                return None
+
+            bridge.send = capture  # type: ignore[method-assign]
+            bridge._send_progress = noop  # type: ignore[method-assign]
+            bridge._keep_typing = noop  # type: ignore[method-assign]
+            bridge._start_reply("secret", 42, "slow research")
+            await asyncio.wait_for(started.wait(), timeout=5)
+            self.assertTrue(await bridge._command("secret", 42, "/cancel"))
+            await asyncio.sleep(0)
+            self.assertNotIn(42, bridge._chat_replies)
+            self.assertTrue(any("Cancelled" in message for message in sent))
+
     async def test_a_slow_reply_does_not_block_commands(self):
         """A generation takes minutes on this hardware. If replies ran inline, a button
         press or command arriving meanwhile would sit unread and look broken."""

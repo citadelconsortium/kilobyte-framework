@@ -54,6 +54,8 @@ likewise separates live work from the answer and both terminal renderers show co
 redacted arguments/results. The security agent now learns target-specific approaches via
 skills instead of receiving a canned playbook. Active-route context reporting no longer
 labels a cloud model with the local runtime's 8192-token window.
+Telegram now tracks active and queued work per chat so `/cancel` and the Stop button can
+terminate one chat cleanly without turning cancellation into a global daemon stop.
 
 ### 1.13.0: disconnect-safe inference and Telegram cloud control
 
