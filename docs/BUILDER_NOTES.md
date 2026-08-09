@@ -23,7 +23,10 @@ Cloudflare Workers AI. Keys are stored in a 0600 providers file and providers re
 HTTPS. Cloudflare requires an account-scoped base URL or
 `KILOBYTE_CLOUDFLARE_ACCOUNT_ID`; `/model` fetches the selected provider's live model
 catalog. GitHub Models was retired in July 2026 and is intentionally not advertised.
-Hermes Agent is a client rather than a separate inference endpoint.
+Hermes Agent is a client rather than a separate inference endpoint. Groq uses
+`https://api.groq.com/openai/v1`; requests include a project user-agent to avoid
+edge-signature blocking, and retired `llama-3.3-70b-versatile` configs migrate to
+`llama-3.1-8b-instant` on read.
 
 ## Install / use
 
