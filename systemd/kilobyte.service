@@ -14,7 +14,8 @@ ExecStart=/usr/bin/python -m kilobyte.daemon
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=300
-TimeoutStopSec=60
+# A supplied GGUF may take time to release on CPU-only guests.
+TimeoutStopSec=180
 RuntimeDirectory=kilobyte
 RuntimeDirectoryMode=0750
 StateDirectory=kilobyte
@@ -32,4 +33,3 @@ LockPersonality=true
 
 [Install]
 WantedBy=multi-user.target
-
