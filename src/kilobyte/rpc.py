@@ -146,6 +146,7 @@ class RPCServer:
                     request.get("effort"),
                     request.get("agent_profile"),
                     bool(request.get("private", False)),
+                    bool(request.get("fresh", False)),
                 )
                 try:
                     async for event in run:
