@@ -75,7 +75,9 @@ tools, tokens) and no step counter, an F2 runtime panel, and the active brain in
 
 **Easy cloud escalation.** `/cloud` opens a picker of known OpenAI-compatible providers; the
 user supplies only an API key (base URL and default model come from a catalog), it is saved
-`0600` and made default. `/switch` flips the active brain between that provider and local Kilo
+`0600` and made default. The catalog includes NVIDIA NIM, Z.AI/GLM, AI Native Studio and
+Speka; AI Native Studio uses its documented `X-API-Key` header while the other entries use
+Bearer authentication. `/switch` flips the active brain between that provider and local Kilo
 (Kilo default), shown in the stats bar. Local is always the default; escalation is explicit.
 
 **Telegram redesign + management.** Animated progress card (spinner, phase icon, elapsed,
