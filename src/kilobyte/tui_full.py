@@ -369,6 +369,7 @@ class KiloApp:
             head = [("class:stat", f" {wave} "), ("class:dim", "ready")]
         bar = head + [
             ("class:stat.k", "   ⏱ "), ("class:stat", f"{elapsed:0.0f}s"),
+            ("class:stat.k", "   ↗ requests "), ("class:stat", str((self.status.get("memory") or {}).get("requests", 0))),
             ("class:stat.k", "   🔧 tools "), ("class:stat", f"{self.tools_used}"),
             ("class:stat.k", "   ⇥ tokens "), ("class:stat", f"{self.tokens}"),
             ("class:stat.k", "   effort "), ("class:stat", f"{self.effort}"),
