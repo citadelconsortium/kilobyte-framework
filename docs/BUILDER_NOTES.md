@@ -59,6 +59,12 @@ mode. Providers that do not advertise a limit are labelled `provider-managed`.
 Research-profile turns require successful `web_search` and `web_fetch` calls before an
 answer is accepted. Intermediate planning and promise text is reset from clients; repeated
 general non-performance is reported as failure instead of false completion.
+The full-screen TUI retains the original single Kilo turn box: agent activation, exact
+active tools, redacted work, and the answer share one border. Thinking events do not append
+rows, repeated provider whitespace is collapsed, and discarded preambles are retracted.
+Cloud providers receive native tool schemas first, with a schema-bearing JSON text-tool
+fallback for models/endpoints that reject the native field. XML-function and JSON envelopes
+are still validated against the active interface allow-list before dispatch.
 The live stats bar intentionally omits the user's request text so status indicators stay
 compact; it shows phase, request count, tools, tokens, model, queue, and context instead.
 The animated context meter is local-only; cloud mode omits context from the status bar.
@@ -69,7 +75,7 @@ Past-chat selectors include local date/time. OpenRouter free-model discovery acc
 
 ## Verification and limits
 
-The full suite is 138 tests and passes. The Framework installer is intentionally
+The full suite is 144 tests and passes. The Framework installer is intentionally
 usable without `llama-server` for cloud-only operation. Local GGUF performance is
 bounded by the target machine; advanced coding/security work should use capable
 hardware or an explicitly selected cloud model. Keep the security profile and

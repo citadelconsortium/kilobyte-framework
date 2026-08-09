@@ -341,10 +341,10 @@ class ProviderRegistry:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        def open_request():
+        def open_request(active_payload: dict[str, Any]):
             request = urllib.request.Request(
                 f"{provider.base_url}/chat/completions",
-                data=json.dumps(payload).encode(),
+                data=json.dumps(active_payload).encode(),
                 # The key goes in a header, never a command line or a log.
                 headers={
                     "Content-Type": "application/json",
@@ -357,10 +357,45 @@ class ProviderRegistry:
             return urllib.request.urlopen(request, timeout=provider.timeout)
 
         try:
-            response = await asyncio.to_thread(open_request)
+            response = await asyncio.to_thread(open_request, payload)
         except urllib.error.HTTPError as exc:
             detail = exc.read()[:400].decode("utf-8", "replace")
-            raise ProviderError(f"{provider.label} refused the request ({exc.code}): {detail}") from exc
+            # Some OpenAI-compatible endpoints serve models that can reason about tools
+            # but reject the native `tools` request field. Retry those models once with the
+            # same schemas expressed as an explicit text protocol; agent.py safely recovers
+            # the resulting JSON tool envelope against the active interface allow-list.
+            tool_schema_error = bool(tools) and exc.code in {400, 404, 415, 422} and any(
+                word in detail.lower()
+                for word in ("tool", "function", "schema", "unsupported", "unknown field")
+            )
+            if not tool_schema_error:
+                raise ProviderError(f"{provider.label} refused the request ({exc.code}): {detail}") from exc
+            compatibility = {
+                "role": "system",
+                "content": (
+                    "This endpoint rejected native tool calling, but the framework still "
+                    "provides these tools. To call one, output exactly "
+                    '<tool_call>{"name":"TOOL_NAME","arguments":{...}}</tool_call> '
+                    "with no surrounding prose. The framework will execute it and return "
+                    "the result. Active definitions: "
+                    + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))
+                ),
+            }
+            fallback_payload = dict(payload)
+            fallback_payload.pop("tools", None)
+            fallback_payload.pop("tool_choice", None)
+            fallback_payload["messages"] = [*messages, compatibility]
+            log.info("%s rejected native tools; using text-tool compatibility", provider.label)
+            try:
+                response = await asyncio.to_thread(open_request, fallback_payload)
+            except urllib.error.HTTPError as retry:
+                retry_detail = retry.read()[:400].decode("utf-8", "replace")
+                raise ProviderError(
+                    f"{provider.label} refused native and compatible tool requests "
+                    f"({retry.code}): {retry_detail}"
+                ) from retry
+            except Exception as retry:
+                raise ProviderError(f"{provider.label} unreachable: {retry}") from retry
         except Exception as exc:
             raise ProviderError(f"{provider.label} unreachable: {exc}") from exc
 

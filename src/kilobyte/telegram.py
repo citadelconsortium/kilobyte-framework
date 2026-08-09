@@ -391,6 +391,11 @@ class TelegramBridge:
                 elif kind == "agent":
                     agent_label = str(event.get("profile") or "")
                     state["work"].append(f"◇ agent  {agent_label}")
+                elif kind == "capabilities":
+                    names = [str(name) for name in event.get("tools") or []]
+                    state["work"].append(
+                        f"◇ tools active ({len(names)})  " + " · ".join(names)
+                    )
                 elif kind == "brain":
                     brain_label = str(event.get("label") or "")
                     state["phase"] = f"using {brain_label}"

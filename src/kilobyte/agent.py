@@ -69,11 +69,23 @@ _INLINE_TOOL_BLOCK_RE = re.compile(
     r"<tool_call>\s*<function=([^>]+)>\s*(.*?)\s*</function>\s*</tool_call>",
     re.IGNORECASE | re.DOTALL,
 )
+_INLINE_JSON_TOOL_BLOCK_RE = re.compile(
+    r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.IGNORECASE | re.DOTALL
+)
 _INLINE_PARAMETER_RE = re.compile(
     r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", re.IGNORECASE | re.DOTALL
 )
 _INLINE_MARKER_RE = re.compile(r"<(?:tool_call|function=)", re.IGNORECASE)
 _STREAM_GUARD_CHARS = 64
+_FALSE_CAPABILITY_DENIAL_RE = re.compile(
+    r"\b(?:"
+    r"(?:i\s+)?(?:cannot|can't|do not|don't)\s+(?:access|use)|"
+    r"(?:i\s+)?(?:do not|don't)\s+have\s+access\s+to|"
+    r"(?:i\s+am\s+)?unable\s+to\s+(?:access|use)|"
+    r"no\s+access\s+to"
+    r")\s+(?:the\s+)?(?:tools?|agents?|machine|system|terminal|files?)\b",
+    re.IGNORECASE,
+)
 
 
 def _inline_argument(raw: str) -> Any:
@@ -99,6 +111,38 @@ def _parse_inline_tool_calls(
     saw_markup = bool(_INLINE_MARKER_RE.search(content))
     calls: list[dict[str, Any]] = []
     rejected: list[str] = []
+
+    def add_json_call(raw: str) -> None:
+        try:
+            item = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(item, dict):
+            return
+        function = item.get("function") if isinstance(item.get("function"), dict) else item
+        name = str(function.get("name", "")).strip()
+        arguments = function.get("arguments", {})
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                arguments = {"input": arguments}
+        if not isinstance(arguments, dict) or not name:
+            return
+        if name not in allowed_names:
+            rejected.append(name)
+            return
+        calls.append(
+            {
+                "id": "inline-" + uuid.uuid4().hex,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": json.dumps(arguments, ensure_ascii=False),
+                },
+            }
+        )
+
     for match in _INLINE_TOOL_BLOCK_RE.finditer(content):
         name = match.group(1).strip()
         arguments = {
@@ -118,7 +162,10 @@ def _parse_inline_tool_calls(
                 },
             }
         )
-    clean = _INLINE_TOOL_BLOCK_RE.sub("", content).strip()
+    for match in _INLINE_JSON_TOOL_BLOCK_RE.finditer(content):
+        add_json_call(match.group(1))
+    clean = _INLINE_TOOL_BLOCK_RE.sub("", content)
+    clean = _INLINE_JSON_TOOL_BLOCK_RE.sub("", clean).strip()
     if saw_markup and not calls and not rejected:
         marker = _INLINE_MARKER_RE.search(clean)
         clean = clean[: marker.start()].strip() if marker else clean
@@ -139,6 +186,10 @@ def _looks_like_punt(content: str | None) -> bool:
         return True
     tail = stripped[-60:].lower()
     return any(phrase in tail for phrase in _PUNT_TAILS)
+
+
+def _looks_like_false_capability_denial(content: str | None) -> bool:
+    return bool(content and _FALSE_CAPABILITY_DENIAL_RE.search(content))
 
 
 class Agent:
@@ -241,6 +292,30 @@ class Agent:
         if profile.name != "general":
             messages.append({"role": "system", "content": profile.instructions})
             yield {"type": "agent", "profile": profile.name, "hint": profile.hint}
+        tool_schemas = self.tools.schemas(remote, text)
+        available_tool_names = sorted(
+            schema.get("function", {}).get("name", "")
+            for schema in tool_schemas
+            if schema.get("function", {}).get("name")
+        )
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    f"Active specialist for this turn: {profile.name}. It is already active; "
+                    "do not claim that agents are unavailable. Real tools available in this "
+                    "interface: "
+                    + (", ".join(available_tool_names) if available_tool_names else "none")
+                    + ". Use these exact tool names when the task needs action; never claim a "
+                    "listed tool is unavailable."
+                ),
+            }
+        )
+        yield {
+            "type": "capabilities",
+            "agent": profile.name,
+            "tools": available_tool_names,
+        }
         facts = [] if fresh else self.memory.recall(text)
         if facts:
             messages.append(
@@ -307,13 +382,13 @@ class Agent:
             permission_callback=permission_callback,
             private=private,
         )
-        tool_schemas = self.tools.schemas(remote, text)
         seen_calls: set[tuple[str, str]] = set()
         # A small model sometimes replies with only the *intent* to act ("let me
         # calculate…") and no tool call, so the loop would accept that promise as the
         # answer. Bounded follow-through nudges turn it into either the tool call or the
         # real answer without creating an unbounded loop.
         follow_through_nudges = 0
+        capability_nudges = 0
         # Research is an evidence-bearing task, not a prose style. The framework therefore
         # refuses to accept a research-profile answer until this turn has actually searched
         # and opened a source successfully. This catches models that ignore the tool schema,
@@ -534,6 +609,43 @@ class Agent:
                         self.memory.add_message(session_id, "assistant", failure)
                         yield {"type": "done", "session_id": session_id, "research_failed": True}
                         return
+                if (
+                    not remote
+                    and tool_schemas
+                    and _looks_like_false_capability_denial(content)
+                ):
+                    if capability_nudges < 3:
+                        capability_nudges += 1
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "That capability denial is false. The active specialist is "
+                                    f"{profile.name}, and this turn has these real tools: "
+                                    + ", ".join(available_tool_names)
+                                    + ". Use the appropriate tool now and carry the task through, "
+                                    "or answer directly if no tool is required."
+                                ),
+                            }
+                        )
+                        if emitted_this_step:
+                            yield {"type": "response_reset"}
+                            emitted_this_step = False
+                            sir_started = False
+                        yield {"type": "thinking"}
+                        continue
+                    if emitted_this_step:
+                        yield {"type": "response_reset"}
+                    failure = (
+                        "Sir, I did not complete that task: the selected model repeatedly denied "
+                        "the tools and active specialist that the framework supplied. No false "
+                        "capability claim has been stored as a result. Please retry or select "
+                        "another model, Sir."
+                    )
+                    yield {"type": "token", "text": failure}
+                    self.memory.add_message(session_id, "assistant", failure)
+                    yield {"type": "done", "session_id": session_id, "task_failed": True}
+                    return
                 # The model stopped without calling a tool. If it only announced an action
                 # instead of delivering one, push it to actually finish rather than recording
                 # the promise as the answer. Retries are bounded, but a second promise is not
