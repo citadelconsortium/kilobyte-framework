@@ -102,6 +102,25 @@ class RPCServer:
                     await self._send(writer, {"type": "result", "data": {"ok": True, "label": prov.label, "name": prov.name}})
                 except Exception as exc:
                     await self._send(writer, {"type": "result", "data": {"ok": False, "error": str(exc)}})
+            elif command == "set_telegram_token":
+                token = str(request.get("token", "")).strip()
+                if not token or ":" not in token or len(token) > 256:
+                    await self._send(writer, {"type": "result", "data": {"ok": False, "error": "invalid Telegram bot token"}})
+                else:
+                    path = self.agent.settings.telegram_path
+                    try:
+                        current: dict[str, Any] = {}
+                        if path.is_file():
+                            current = json.loads(path.read_text(encoding="utf-8"))
+                        current["token"] = token
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        tmp = path.with_suffix(path.suffix + ".tmp")
+                        tmp.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+                        os.chmod(tmp, 0o600)
+                        os.replace(tmp, path)
+                        await self._send(writer, {"type": "result", "data": {"ok": True}})
+                    except Exception as exc:
+                        await self._send(writer, {"type": "result", "data": {"ok": False, "error": str(exc)}})
             elif command == "chat":
                 async def permission(capability: str, detail: str, risk: Risk) -> bool:
                     permission_id = uuid.uuid4().hex
