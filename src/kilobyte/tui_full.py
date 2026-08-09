@@ -400,8 +400,6 @@ class KiloApp:
                 filled = round(ratio * 8)
                 meter = "".join("█" if i < filled else "░" for i in range(8))
                 bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", f"{meter} {used}/{cloud_ctx}")]
-            elif self.cloud_active:
-                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", "cloud ?")]
             else:
                 used = int(used or 0)
                 ratio = min(1.0, used / max(1, int(ctx)))
