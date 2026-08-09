@@ -19,8 +19,8 @@ automatic fallback or remove destructive-action approval.
 OpenAI-compatible entries include OpenRouter, OpenAI, Anthropic, Groq, DeepSeek,
 Together, Mistral, xAI, Gemini, Cerebras, Fireworks, Perplexity, Nebius,
 Hyperbolic, Cohere, SambaNova, Alibaba Qwen, Hugging Face Inference Providers,
-Cloudflare Workers AI, NVIDIA NIM, Z.AI/GLM, AI Native Studio, and Speka. Keys are
-stored in a 0600 providers file and providers require
+Cloudflare Workers AI, Ollama Cloud, Agnes AI, ModelScope, LLM7.io, OpenCode Zen, and
+GLHF.chat. Keys are stored in a 0600 providers file and providers require
 HTTPS. Cloudflare requires an account-scoped base URL or
 `KILOBYTE_CLOUDFLARE_ACCOUNT_ID`; `/model` fetches the selected provider's live model
 catalog. GitHub Models was retired in July 2026 and is intentionally not advertised.
@@ -28,6 +28,14 @@ Hermes Agent is a client rather than a separate inference endpoint. Groq uses
 `https://api.groq.com/openai/v1`; requests include a project user-agent to avoid
 edge-signature blocking, and retired `llama-3.3-70b-versatile` configs migrate to
 `llama-3.1-8b-instant` on read.
+
+The replacement integrations use these documented defaults: Ollama Cloud
+`https://ollama.com/v1` (`gpt-oss:120b`), Agnes AI
+`https://apihub.agnes-ai.com/v1` (`agnes-2.0-flash`), ModelScope
+`https://api-inference.modelscope.cn/v1` (`Qwen/Qwen3-32B`), LLM7.io
+`https://api.llm7.io/v1` (`fast`), OpenCode Zen
+`https://opencode.ai/zen/v1` (`big-pickle`), and GLHF.chat
+`https://glhf.chat/api/openai/v1` (`hf:meta-llama/Llama-3.3-70B-Instruct`).
 
 ## Install / use
 

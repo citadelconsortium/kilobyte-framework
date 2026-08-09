@@ -127,14 +127,16 @@ class ProviderConfigureTests(unittest.TestCase):
             prov = registry.configure("huggingface", "hf_test")
             self.assertEqual(prov.base_url, "https://router.huggingface.co/v1")
             self.assertIn("Coder", prov.model)
-    def test_new_openai_compatible_catalog_providers_have_correct_endpoints(self):
+    def test_replacement_catalog_providers_have_correct_endpoints(self):
         with tempfile.TemporaryDirectory() as raw:
             registry = ProviderRegistry(Path(raw) / "providers.json")
             expected = {
-                "nvidia": ("https://integrate.api.nvidia.com/v1", "Authorization"),
-                "zai": ("https://api.z.ai/api/paas/v4", "Authorization"),
-                "ainative": ("https://api.ainative.studio/v1", "X-API-Key"),
-                "speka": ("https://speka.me/v1", "Authorization"),
+                "ollama": ("https://ollama.com/v1", "Authorization"),
+                "agnes": ("https://apihub.agnes-ai.com/v1", "Authorization"),
+                "modelscope": ("https://api-inference.modelscope.cn/v1", "Authorization"),
+                "llm7": ("https://api.llm7.io/v1", "Authorization"),
+                "opencode_zen": ("https://opencode.ai/zen/v1", "Authorization"),
+                "glhf": ("https://glhf.chat/api/openai/v1", "Authorization"),
             }
             for name, (base_url, auth_header) in expected.items():
                 prov = registry.configure(name, "test-key")
