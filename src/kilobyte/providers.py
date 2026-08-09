@@ -127,6 +127,9 @@ class ProviderRegistry:
                 continue
             key = str(entry.get("api_key", "")).strip()
             model = str(entry.get("model", "")).strip()
+            if str(name).lower() == "groq" and model in {"llama-3.3-70b-versatile", "llama3-70b-8192"}:
+                # These Groq IDs have been retired; keep existing configs usable.
+                model = KNOWN_PROVIDERS["groq"]["model"]
             base_url = str(entry.get("base_url", "https://openrouter.ai/api/v1")).strip().rstrip("/")
             if not key or key.startswith("PASTE_"):
                 log.warning("provider %s has no api key; skipped", name)
