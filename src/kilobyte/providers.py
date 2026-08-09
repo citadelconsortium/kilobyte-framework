@@ -164,13 +164,20 @@ class ProviderRegistry:
         For OpenRouter, free models (id ending ':free') are surfaced first."""
         import urllib.request
         prov = self.resolve(name)
+        if prov.name.lower() == "cloudflare":
+            # Cloudflare does not expose an OpenAI-style /models route. Its account API
+            # provides the searchable model catalogue at /ai/models/search.
+            url = prov.base_url.replace("/ai/v1", "/ai/models/search") + "?format=openrouter"
+        else:
+            url = f"{prov.base_url}/models"
         req = urllib.request.Request(
-            f"{prov.base_url}/models",
+            url,
             headers={"Authorization": f"Bearer {prov.api_key}", "Accept": "application/json", **_ATTRIBUTION},
         )
         with urllib.request.urlopen(req, timeout=30) as r:
             data = json.load(r)
-        ids = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
+        entries = data.get("data") or data.get("result") or []
+        ids = [m.get("id") for m in entries if isinstance(m, dict) and m.get("id")]
         if only_free and "openrouter" in prov.base_url:
             free = sorted(i for i in ids if str(i).endswith(":free"))
             if free:

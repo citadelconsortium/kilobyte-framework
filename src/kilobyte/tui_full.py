@@ -113,6 +113,7 @@ _COMMANDS = [
     ("/cloud key", "add or change a provider API key"),
     ("/botkey", "set or change the Telegram bot token"),
     ("/cloud ", "set up or use a cloud model (provider picker)"),
+    ("/cloudswitch", "select or reconfigure the active cloud provider"),
     ("/switch", "flip between cloud and local Kilo (Kilo default)"),
     ("/model ", "change the cloud model"),
     ("/gguf", "browse downloaded .gguf files and load one as the brain"),
@@ -578,6 +579,9 @@ class KiloApp:
                 self._append(f"\n— effort set to {level} —\n")
             else:
                 self._append("\n— use /effort high|medium|low —\n")
+            return True
+        if text.startswith("/cloudswitch"):
+            self._spawn(self._cloud_setup(force_key=False))
             return True
         if text.startswith("/cloud"):
             rest = text[len("/cloud"):].strip()
