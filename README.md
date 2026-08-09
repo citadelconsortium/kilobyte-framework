@@ -28,7 +28,9 @@
 curl -fsSL https://raw.githubusercontent.com/citadelconsortium/kilobyte-framework/main/scripts/install.sh | sudo bash
 kilo                 # then /gguf to load a downloaded model, or /cloud for a hosted one
 ```
-The installer sets up the app, dependencies, and the service in a single pass. **No model is downloaded** — this framework ships without a brain.
+The installer sets up the app, dependencies, and the service in a single pass. On Arch it
+performs a full supported upgrade so `llama-cpp` and `ggml` remain ABI-compatible. **No model
+is downloaded** — this framework ships without a brain.
 
 Telegram publishes `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
 the real command menu. An allow-listed owner can select cloud inference from chat while the
