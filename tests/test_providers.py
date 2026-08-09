@@ -80,6 +80,11 @@ if __name__ == "__main__":
 
 
 class ProviderConfigureTests(unittest.TestCase):
+    def test_groq_catalog_uses_current_production_model(self):
+        with tempfile.TemporaryDirectory() as raw:
+            prov = ProviderRegistry(Path(raw) / "providers.json").configure("groq", "gsk_test")
+            self.assertEqual(prov.base_url, "https://api.groq.com/openai/v1")
+            self.assertEqual(prov.model, "llama-3.1-8b-instant")
     def test_huggingface_catalog_uses_router_api(self):
         with tempfile.TemporaryDirectory() as raw:
             registry = ProviderRegistry(Path(raw) / "providers.json")
