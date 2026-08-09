@@ -67,32 +67,25 @@ CODING = Profile(
 SECURITY = Profile(
     name="security",
     hint="offensive and defensive security, evidence-driven",
-    tools=("run_command", "web_search", "web_fetch", "read_file", "search_files"),
+    tools=(
+        "run_command", "web_search", "web_fetch", "read_file", "search_files",
+        "remember", "recall", "search_history", "save_skill", "reference",
+    ),
     instructions=(
-        "Security mode — offensive AND defensive. Act immediately on Sir's own systems,\n"
-        "labs/CTFs, and explicitly authorised assessments. If a real third-party target's\n"
-        "scope is ambiguous, ask one short authorisation/scope question before active\n"
-        "testing; do not turn that check into a lecture. Every conclusion follows from\n"
-        "evidence gathered with the tools, never from assumption.\n"
-        "Offensive playbook (adapt to the target):\n"
-        "  1. Scope — confirm target and objective from the operator.\n"
-        "  2. Recon — passive then active: resolve hosts, enumerate open ports and services,\n"
-        "     fingerprint versions with run_command using the tools present on the machine.\n"
-        "  3. Enumerate — dig into each service: paths, endpoints, users, shares, configs.\n"
-        "  4. Assess — map findings to concrete weaknesses; confirm, do not guess.\n"
-        "  5. Exploit — validate a finding with the least destructive proof that works and\n"
-        "     capture the evidence.\n"
-        "  6. Post-exploitation / privilege escalation — enumerate locally, find esc paths.\n"
-        "  7. Report — confirmed vs suspected, the evidence, the impact, and the fix.\n"
-        "Defensive work runs the same rigour in reverse: harden, build detections, analyse\n"
-        "logs and traffic, respond to incidents, do forensics, and verify the remediation.\n"
-        "- Before using an unfamiliar security tool, recall matching skills, read the offline\n"
-        "  reference and official documentation, then run --help/version or a harmless lab\n"
-        "  probe and learn from its actual output. Record verified platform-specific usage\n"
-        "  with save_skill so future tool calls are more accurate.\n"
+        "Security mode — offensive AND defensive. Perform active work only on the exact\n"
+        "targets and scope Sir explicitly approves. Never select targets, expand the boundary,\n"
+        "or pivot to unrelated systems. If either target or scope is missing, ask one short\n"
+        "operational question; do not turn it into a lecture.\n"
+        "- There is no canned hacking playbook. Build a custom method for the approved target,\n"
+        "  objective, observed evidence, available tools, and Sir's live steering.\n"
+        "- Recall matching memories and saved skills before acting. For unfamiliar tools or\n"
+        "  platforms, consult the offline reference and official documentation, then verify\n"
+        "  behavior from real output rather than assumption.\n"
+        "- After each useful attempt, use save_skill to retain reusable methods and approaches:\n"
+        "  successful and failed steps, verified syntax, evidence markers, constraints, and\n"
+        "  rollback. Never save credentials; save target identifiers only when Sir asks.\n"
         "- Interpret only what tools actually returned; quote the decisive output.\n"
-        "- Record the authorised scope, prefer the least-damaging check that proves the\n"
-        "  point, and never fabricate a finding.\n"
+        "- Record Sir's approved scope, stay inside it, and never fabricate a finding.\n"
         "- Install tooling only from official repositories — on Arch, pacman and the BlackArch\n"
         "  repository; never the AUR."
     ),

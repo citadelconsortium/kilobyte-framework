@@ -14,6 +14,10 @@ The same Sir directive, evidence-first grounding, follow-through loop, and
 approval boundaries apply here. Do not silently turn cloud mode into an
 automatic fallback or remove destructive-action approval.
 
+The security profile has no canned playbook. It operates only on the exact target and
+scope Sir supplies, derives a custom method from evidence and steering, and can recall/save
+verified methods. Do not restore the removed seeded security-playbook memory.
+
 ## Provider catalog
 
 OpenAI-compatible entries include OpenRouter, OpenAI, Anthropic, Groq, DeepSeek,
@@ -44,6 +48,13 @@ does not download a brain. Use `/cloud` for a configured provider or `/gguf` for
 an operator-supplied local model. `/botkey` configures Telegram through the daemon
 RPC. Telegram publishes real command autocomplete and provides `/local`, `/cloud`,
 `/switch`, `/model`, and `/agent` routing per chat; its tool boundary remains read-only.
+Progress animates every 1.2 seconds and a second persistent card shows the bounded,
+redacted work log and live reply preview. `agent.py` recovers XML-like tool calls emitted
+inside a provider's text stream, but only for names in the already-filtered interface
+schema; `telegram_render.py` renders the final Markdown as Telegram-safe HTML.
+It collapses provider whitespace outside code, safely splits long formatted messages, and
+reports context for the active route instead of reusing the local 8192-token value in cloud
+mode. Providers that do not advertise a limit are labelled `provider-managed`.
 The live stats bar intentionally omits the user's request text so status indicators stay
 compact; it shows phase, request count, tools, tokens, model, queue, and context instead.
 The animated context meter is local-only; cloud mode omits context from the status bar.
@@ -54,7 +65,7 @@ Past-chat selectors include local date/time. OpenRouter free-model discovery acc
 
 ## Verification and limits
 
-The full VM suite is 107 tests and passes. The Framework installer is intentionally
+The full suite is 136 tests and passes. The Framework installer is intentionally
 usable without `llama-server` for cloud-only operation. Local GGUF performance is
 bounded by the target machine; advanced coding/security work should use capable
 hardware or an explicitly selected cloud model. Keep the security profile and

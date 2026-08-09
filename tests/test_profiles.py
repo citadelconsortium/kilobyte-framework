@@ -1,6 +1,6 @@
 import unittest
 
-from kilobyte.profiles import CONVERSATION, ORCHESTRATOR, PROFILES, select
+from kilobyte.profiles import CONVERSATION, ORCHESTRATOR, PROFILES, SECURITY, select
 
 
 class ProfileSelectionTests(unittest.TestCase):
@@ -36,6 +36,14 @@ class ProfileSelectionTests(unittest.TestCase):
         text = CONVERSATION.instructions.lower()
         self.assertIn("finished result", text)
         self.assertIn("never announce an action", text)
+
+    def test_security_agent_is_custom_scoped_and_can_learn(self):
+        text = " ".join(SECURITY.instructions.lower().split())
+        self.assertIn("exact targets and scope sir explicitly approves", text)
+        self.assertIn("no canned hacking playbook", text)
+        self.assertIn("save_skill", SECURITY.tools)
+        self.assertIn("recall", SECURITY.tools)
+        self.assertNotIn("offensive playbook", text)
 
 
 if __name__ == "__main__":

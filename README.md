@@ -40,6 +40,10 @@ state with daemon, brain, cache, runtime, uptime, and memory details.
 Telegram publishes `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
 the real command menu. An allow-listed owner can select cloud inference from chat while the
 remote tool boundary remains read-only: no shell, writes, services, or destructive actions.
+A separate live-work card shows redacted tool activity, final research is rendered as clean
+Telegram HTML, and text-encoded provider tool calls are intercepted and safely dispatched
+instead of being shown to the user. Excess blank lines are collapsed and context reporting
+follows the active local/cloud route.
 
 ## Bring your own model
 - **A local GGUF** — download any GGUF (HuggingFace, etc.) into `~/` or `~/Downloads`, then run **`/gguf`** in the TUI to browse and load it. ⚠️ **Only load a model your machine can actually run** — the picker shows your free RAM, and a GGUF larger than that will fail to load or run unusably slow (a bad load auto-rolls-back to the previous brain). Or: `kilo brain deploy /path/to/model.gguf`.

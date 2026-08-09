@@ -1,6 +1,6 @@
 [project]
 name = "kilobyte"
-version = "1.13.0"
+version = "1.13.1"
 description = "Local-first terminal AI powered by one persistent GGUF brain"
 requires-python = ">=3.11"
 license = {text = "MIT"}

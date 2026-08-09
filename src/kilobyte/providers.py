@@ -235,7 +235,15 @@ class ProviderRegistry:
                     continue
                 model_id = item.get("id") or item.get("name") or item.get("model")
                 limits = item.get("limits") if isinstance(item.get("limits"), dict) else {}
-                raw_limit = item.get("context_length") or item.get("context_window") or item.get("max_input_tokens") or limits.get("max_input_tokens")
+                raw_limit = (
+                    item.get("context_length")
+                    or item.get("context_window")
+                    or item.get("max_context_length")
+                    or item.get("max_model_len")
+                    or item.get("max_input_tokens")
+                    or item.get("input_token_limit")
+                    or limits.get("max_input_tokens")
+                )
                 if model_id and raw_limit:
                     try: self._context_limits[(prov.name, str(model_id))] = int(raw_limit)
                     except (TypeError, ValueError): pass
@@ -272,14 +280,18 @@ class ProviderRegistry:
             pass
         return model.strip()
 
-    def info(self) -> dict[str, Any]:
-        """Which provider is default and what model it currently uses."""
-        name = self.default_name()
+    def info(self, name: str | None = None) -> dict[str, Any]:
+        """Report the requested provider, not a stale local/default route."""
+        selected = name or self.default_name()
         model = ""
-        if name:
-            raw = self._raw()
-            model = str((raw.get("providers") or {}).get(name, {}).get("model", ""))
-        return {"default": name, "model": model, "context_limit": self.context_limit(name, model), "configured": sorted(self.providers())}
+        if selected:
+            model = self.resolve(selected).model
+        return {
+            "default": selected,
+            "model": model,
+            "context_limit": self.context_limit(selected, model),
+            "configured": sorted(self.providers()),
+        }
 
     def context_limit(self, name: str | None = None, model: str | None = None) -> int | None:
         try:
