@@ -36,7 +36,7 @@ an operator-supplied local model. `/botkey` configures Telegram through the daem
 RPC; Telegram `/commands` is an alias for `/help`.
 The live stats bar intentionally omits the user's request text so status indicators stay
 compact; it shows phase, request count, tools, tokens, model, queue, and context instead.
-Cloud context is shown only when the selected model API reports a verified limit.
+The animated context meter is local-only; cloud mode omits context from the status bar.
 The TUI retains background RPC/monitor tasks and shows their live count in the stats bar;
 the daemon separately monitors and restarts a failed local runtime.
 Past-chat selectors include local date/time. OpenRouter free-model discovery accepts both
