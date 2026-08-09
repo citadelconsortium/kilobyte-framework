@@ -36,12 +36,14 @@ command to register with their native init system.
 
 `kilo status` provides a compact color-coded `READY`, `DEGRADED`, `FAILED`, or `STOPPED`
 state with daemon, brain, cache, runtime, uptime, and memory details.
+The confirmed v1.13.0 one-box TUI layout is retained, with Pygments language-aware syntax
+colours added inside fenced code blocks only.
 
 Telegram publishes `/cancel`, `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
 the real command menu. An allow-listed owner can select cloud inference from chat while the
 remote tool boundary remains read-only: no shell, writes, services, or destructive actions.
 A separate live-work card shows redacted tool activity, final research is rendered as clean
-Telegram HTML, and text-encoded provider tool calls are intercepted and safely dispatched
+Telegram HTML with language-labelled code blocks, and text-encoded provider tool calls are intercepted and safely dispatched
 instead of being shown to the user. Excess blank lines are collapsed and context reporting
 follows the active local/cloud route.
 Cancellation is per chat and stops both active and queued work without affecting other chats.

@@ -3,7 +3,7 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.13.4 · brain-free distribution (operator-supplied GGUF or explicit
+Framework version 1.13.5 · brain-free distribution (operator-supplied GGUF or explicit
 cloud provider).
 
 ## What is in it
@@ -39,6 +39,15 @@ and a stricter read-only policy for anything arriving remotely.
 installer that provisions dependencies, the service user, the model and the service.
 
 ## Changes and why
+
+### 1.13.5: language-aware code output
+
+Fenced code in the confirmed v1.13.0 one-box TUI now uses Pygments to distinguish
+keywords, functions, classes, strings, numbers, comments, operators, and punctuation.
+The fence language selects the lexer and unknown languages fall back to plain code. The
+box, agent/tool rows, divider, streaming path, and response placement are unchanged.
+Telegram emits its supported `<pre><code class="language-…">` form for labelled fences.
+The portable installer provisions Pygments alongside prompt_toolkit.
 
 ### 1.13.4: exact v1.13.0 TUI restoration
 

@@ -50,6 +50,17 @@ from prompt_toolkit.lexers import Lexer
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea
 
+try:
+    from prompt_toolkit.styles.pygments import pygments_token_to_classname
+    from pygments import lex as pygments_lex
+    from pygments.lexers import get_lexer_by_name
+    from pygments.lexers.special import TextLexer
+except ModuleNotFoundError:  # pragma: no cover - installer supplies Pygments
+    pygments_lex = None
+    get_lexer_by_name = None
+    TextLexer = None
+    pygments_token_to_classname = None
+
 from .rpc import RPCClient
 
 KILO_ART = (
@@ -110,6 +121,17 @@ STYLE = Style.from_dict({
     "diff.add": "#5fd787",
     "diff.del": "#ff5f5f",
     "code": "#87d7ff",
+    "pygments": "#d7d7d7",
+    "pygments.comment": "#6c6c6c italic",
+    "pygments.keyword": "#ff87d7 bold",
+    "pygments.name.builtin": "#5fd7af",
+    "pygments.name.class": "#87d7ff bold",
+    "pygments.name.decorator": "#ffd787",
+    "pygments.name.function": "#87d7ff",
+    "pygments.literal.number": "#af87ff",
+    "pygments.literal.string": "#ffd787",
+    "pygments.operator": "#ffaf5f",
+    "pygments.punctuation": "#d7d7d7",
     "toolline": "#8a8a8a",
     "prompt": "#5fafff bold",
 })
@@ -149,6 +171,51 @@ class _ChatLexer(Lexer):
     def lex_document(self, document):
         lines = document.lines
 
+        def box_body(line: str) -> tuple[str, str, str]:
+            prefix = "\u2502 " if line.startswith("\u2502 ") else ""
+            suffix = "\u2502" if prefix and line.endswith("\u2502") else ""
+            end = -1 if suffix else None
+            return prefix, line[len(prefix):end], suffix
+
+        def code_context(lineno: int) -> tuple[bool, str]:
+            in_code = False
+            language = "text"
+            for previous in lines[:lineno]:
+                _prefix, content, _suffix = box_body(previous)
+                fence = re.match(r"^\s*```([^\s`]*)", content)
+                if fence is None:
+                    continue
+                if in_code:
+                    in_code = False
+                    language = "text"
+                else:
+                    in_code = True
+                    language = fence.group(1) or "text"
+            return in_code, language
+
+        def syntax_fragments(line: str, language: str):
+            prefix, content, suffix = box_body(line)
+            fragments = [("class:box", prefix)] if prefix else []
+            if (
+                pygments_lex is None
+                or get_lexer_by_name is None
+                or pygments_token_to_classname is None
+            ):
+                fragments.append(("class:code", content))
+            else:
+                try:
+                    lexer = get_lexer_by_name(language, stripnl=False, ensurenl=False)
+                except Exception:
+                    lexer = TextLexer(stripnl=False, ensurenl=False)
+                for token, value in pygments_lex(content, lexer):
+                    if value:
+                        fragments.append(
+                            ("class:" + pygments_token_to_classname(token), value)
+                        )
+            if suffix:
+                fragments.append(("class:box", suffix))
+            return fragments
+
         def get_line(lineno):
             line = lines[lineno]
             stripped = line.strip()
@@ -156,12 +223,9 @@ class _ChatLexer(Lexer):
                 cls = "class:box.you" if " Sir " in line or line.startswith("\u2500\u2500\u2500Sir") else (
                     "class:box.kilo" if ("Kilo" in line or "\u2601" in line) else "class:box")
                 return [(cls, line)]
-            body = line[2:] if line.startswith("\u2502 ") else line
+            _prefix, body, _suffix = box_body(line)
             b = body.lstrip()
-            fences = 0
-            for i in range(lineno):
-                if lines[i].lstrip("\u2502 ").startswith("```"):
-                    fences += 1
+            in_code, language = code_context(lineno)
             if "\u26a0" in line or "destructive" in body.lower():
                 return [("class:diff.del", line)]
             if b.startswith("+") and not b.startswith("+++"):
@@ -170,7 +234,9 @@ class _ChatLexer(Lexer):
                 return [("class:diff.del", line)]
             if b.startswith(("\u25c8", "\u2713", "!")):
                 return [("class:toolline", line)]
-            if fences % 2 == 1 or b.startswith("```"):
+            if in_code:
+                return syntax_fragments(line, language)
+            if b.startswith("```"):
                 return [("class:code", line)]
             return [("", line)]
 
