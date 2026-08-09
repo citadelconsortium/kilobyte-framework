@@ -76,6 +76,9 @@ KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
     "perplexity": {"label": "Perplexity", "base_url": "https://api.perplexity.ai", "model": "sonar"},
     "nebius": {"label": "Nebius", "base_url": "https://api.studio.nebius.ai/v1", "model": "meta-llama/Llama-3.3-70B-Instruct"},
     "hyperbolic": {"label": "Hyperbolic", "base_url": "https://api.hyperbolic.xyz/v1", "model": "meta-llama/Llama-3.3-70B-Instruct"},
+    "cohere": {"label": "Cohere", "base_url": "https://api.cohere.com/compatibility/v1", "model": "command-a-03-2025"},
+    "sambanova": {"label": "SambaNova", "base_url": "https://api.sambanova.ai/v1", "model": "Meta-Llama-3.3-70B-Instruct"},
+    "qwen": {"label": "Alibaba Qwen", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
 }
 
 
