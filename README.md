@@ -30,7 +30,9 @@ kilo                 # then /gguf to load a downloaded model, or /cloud for a ho
 ```
 The installer sets up the app, dependencies, and the service in a single pass. On Arch it
 performs a full supported upgrade so `llama-cpp` and `ggml` remain ABI-compatible. **No model
-is downloaded** — this framework ships without a brain.
+is downloaded** — this framework ships without a brain. Package provisioning supports Arch,
+Debian/Ubuntu, Fedora/RHEL, openSUSE, and Alpine; non-systemd hosts receive the exact daemon
+command to register with their native init system.
 
 Telegram publishes `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
 the real command menu. An allow-listed owner can select cloud inference from chat while the
