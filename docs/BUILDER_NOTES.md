@@ -18,8 +18,9 @@ automatic fallback or remove destructive-action approval.
 
 OpenAI-compatible entries include OpenRouter, OpenAI, Anthropic, Groq, DeepSeek,
 Together, Mistral, xAI, Gemini, Cerebras, Fireworks, Perplexity, Nebius,
-Hyperbolic, Cohere, SambaNova, Alibaba Qwen, Hugging Face Inference Providers, and
-Cloudflare Workers AI. Keys are stored in a 0600 providers file and providers require
+Hyperbolic, Cohere, SambaNova, Alibaba Qwen, Hugging Face Inference Providers,
+Cloudflare Workers AI, NVIDIA NIM, Z.AI/GLM, AI Native Studio, and Speka. Keys are
+stored in a 0600 providers file and providers require
 HTTPS. Cloudflare requires an account-scoped base URL or
 `KILOBYTE_CLOUDFLARE_ACCOUNT_ID`; `/model` fetches the selected provider's live model
 catalog. GitHub Models was retired in July 2026 and is intentionally not advertised.
