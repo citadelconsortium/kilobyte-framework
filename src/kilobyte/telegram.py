@@ -34,6 +34,7 @@ class TelegramBridge:
         self._wake = asyncio.Event()
         self._chat_locks: dict[int, asyncio.Lock] = {}
         self._replies: set[asyncio.Task[None]] = set()
+        self._chat_replies: dict[int, set[asyncio.Task[None]]] = {}
         self._sessions: dict[int, str] = {}
         self._fresh: set[int] = set()
         self._chat_providers: dict[int, str] = {}
@@ -67,6 +68,7 @@ class TelegramBridge:
     COMMANDS = (
         ("start", "what Kilo is and how to use it"),
         ("status", "model, route and resource status"),
+        ("cancel", "stop this chat's active and queued work"),
         ("new", "start a fresh conversation"),
         ("local", "use the private local GGUF"),
         ("cloud", "use the default or named cloud model"),
@@ -82,6 +84,7 @@ class TelegramBridge:
         "inline_keyboard": [
             [
                 {"text": "📊 Status", "callback_data": "status"},
+                {"text": "⏹ Cancel", "callback_data": "cancel"},
                 {"text": "✨ New chat", "callback_data": "new"},
             ],
             [
@@ -266,10 +269,16 @@ class TelegramBridge:
 
         task = asyncio.create_task(serialised())
         self._replies.add(task)
-        task.add_done_callback(self._reply_finished)
+        self._chat_replies.setdefault(chat_id, set()).add(task)
+        task.add_done_callback(lambda done: self._reply_finished(chat_id, done))
 
-    def _reply_finished(self, task: asyncio.Task[None]) -> None:
+    def _reply_finished(self, chat_id: int, task: asyncio.Task[None]) -> None:
         self._replies.discard(task)
+        chat_tasks = self._chat_replies.get(chat_id)
+        if chat_tasks is not None:
+            chat_tasks.discard(task)
+            if not chat_tasks:
+                self._chat_replies.pop(chat_id, None)
         if not task.cancelled() and (error := task.exception()) is not None:
             log.error("telegram reply task failed: %s", error)
 
@@ -418,6 +427,14 @@ class TelegramBridge:
                     error = format_summary(event.get("error"), 520)
                     output.append(f"\n[error: {error}]")
                     state["work"].append(f"✗ error  {error}")
+        except asyncio.CancelledError:
+            state["work"].append("■ cancelled by Sir")
+            ticker.cancel()
+            await self._delete(token, chat_id, progress)
+            await self._edit_progress(
+                token, chat_id, work_message, self._live_work_body(state, finished=True)
+            )
+            raise
         except Exception as exc:
             # Silence looks identical to a hung bot, so always tell the user.
             log.exception("telegram request failed for chat %s", chat_id)
@@ -494,6 +511,21 @@ class TelegramBridge:
                 "the selected configured provider; /local keeps everything on Kilobase.",
             ]
             await self.send(token, chat_id, "\n".join(lines), self.MENU)
+            return True
+        if name in {"cancel", "stop"}:
+            tasks = [
+                task
+                for task in self._chat_replies.get(chat_id, set())
+                if not task.done()
+            ]
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+                message = f"⏹ <b>Cancelled</b> {len(tasks)} active/queued task{'s' if len(tasks) != 1 else ''}."
+            else:
+                message = "✅ <i>No active or queued task in this chat.</i>"
+            await self.send(token, chat_id, message, self.MENU)
             return True
         if name == "new":
             self._sessions[chat_id] = self.agent.memory.new_session(
