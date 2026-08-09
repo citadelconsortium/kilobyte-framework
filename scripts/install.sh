@@ -12,7 +12,7 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
 if [[ -z "$ROOT" || ! -f "$ROOT/src/kilobyte/__init__.py" ]]; then
     if ! command -v git >/dev/null; then
-        command -v pacman >/dev/null && pacman -Sy --noconfirm git             || { command -v apt-get >/dev/null && apt-get update && apt-get install -y git; }
+        command -v pacman >/dev/null && pacman -S --needed --noconfirm git             || { command -v apt-get >/dev/null && apt-get update && apt-get install -y git; }
     fi
     DEST="/opt/kilobyte-framework"
     rm -rf "$DEST"
@@ -27,7 +27,7 @@ KILO_GROUP="$(id -gn "$KILO_USER" 2>/dev/null || echo "$KILO_USER")"
 
 if command -v pacman >/dev/null; then
     # python-prompt_toolkit backs the full-screen terminal UI; the rest are the runtime.
-    pacman -Sy --needed --noconfirm llama-cpp python python-prompt_toolkit curl sqlite ripgrep
+    pacman -S --needed --noconfirm llama-cpp python python-prompt_toolkit curl sqlite ripgrep
 fi
 command -v python >/dev/null
 # The framework is deliberately brain-free: cloud mode works without a local
@@ -73,4 +73,4 @@ if [[ ! -f /etc/kilobyte/policy.json ]]; then
 fi
 systemctl daemon-reload
 systemctl enable kilobyte.service
-echo "Application installed. Next: sudo KILOBYTE_USER=$KILO_USER ./scripts/install-model.sh"
+echo "Framework installed. Run: kilo (then /cloud or /gguf)"

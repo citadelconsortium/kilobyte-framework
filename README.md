@@ -30,6 +30,10 @@ kilo                 # then /gguf to load a downloaded model, or /cloud for a ho
 ```
 The installer sets up the app, dependencies, and the service in a single pass. **No model is downloaded** — this framework ships without a brain.
 
+Telegram publishes `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
+the real command menu. An allow-listed owner can select cloud inference from chat while the
+remote tool boundary remains read-only: no shell, writes, services, or destructive actions.
+
 ## Bring your own model
 - **A local GGUF** — download any GGUF (HuggingFace, etc.) into `~/` or `~/Downloads`, then run **`/gguf`** in the TUI to browse and load it. ⚠️ **Only load a model your machine can actually run** — the picker shows your free RAM, and a GGUF larger than that will fail to load or run unusably slow (a bad load auto-rolls-back to the previous brain). Or: `kilo brain deploy /path/to/model.gguf`.
 - **A cloud model** (first-class here) — **`/cloud`** to pick a provider and paste a key: OpenRouter, OpenAI, Anthropic, Groq, DeepSeek, Together, Mistral, xAI, Gemini, Cerebras, Fireworks, Perplexity, Nebius, Hyperbolic, Ollama Cloud, Agnes AI, ModelScope, LLM7.io, OpenCode Zen, and GLHF.chat. These integrations use their documented OpenAI-compatible endpoints and Bearer authentication. Change a key anytime with **`/cloud key`**.

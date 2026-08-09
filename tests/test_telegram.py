@@ -1,8 +1,11 @@
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
+from unittest.mock import patch
 
 from kilobyte.telegram import TelegramBridge
 
@@ -27,12 +30,16 @@ class TelegramConfigTests(unittest.TestCase):
     def test_disabled_with_placeholder_token(self):
         """The shipped example must never accidentally authorise a live bot."""
         with tempfile.TemporaryDirectory() as raw:
-            path = _config(raw, {"token": "PASTE_BOT_TOKEN_HERE", "allowed_chat_ids": [42]})
+            path = _config(
+                raw, {"token": "PASTE_BOT_TOKEN_HERE", "allowed_chat_ids": [42]}
+            )
             self.assertIsNone(TelegramBridge(path, object()).config())  # type: ignore[arg-type]
 
     def test_disabled_when_missing_or_malformed(self):
         with tempfile.TemporaryDirectory() as raw:
-            self.assertIsNone(TelegramBridge(Path(raw) / "absent.json", object()).config())  # type: ignore[arg-type]
+            self.assertIsNone(
+                TelegramBridge(Path(raw) / "absent.json", object()).config()
+            )  # type: ignore[arg-type]
             bad = Path(raw) / "telegram.json"
             bad.write_text("{not json")
             self.assertIsNone(TelegramBridge(bad, object()).config())  # type: ignore[arg-type]
@@ -43,6 +50,12 @@ class TelegramConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             path = _config(raw, {"token": "secret", "allowed_chat_ids": [42]})
             self.assertEqual(TelegramBridge(path, object()).config()["allowed"], {42})  # type: ignore[union-attr,arg-type]
+
+    def test_long_poll_socket_timeout_exceeds_api_timeout(self):
+        response = io.BytesIO(b'{"ok": true, "result": []}')
+        with patch("urllib.request.urlopen", return_value=response) as opened:
+            TelegramBridge._call("token", "getUpdates", {"timeout": 30})
+        self.assertEqual(opened.call_args.kwargs["timeout"], 40)
 
 
 class TelegramDeliveryTests(IsolatedAsyncioTestCase):
@@ -55,6 +68,7 @@ class TelegramDeliveryTests(IsolatedAsyncioTestCase):
                 async def generate():
                     raise RuntimeError("model unavailable")
                     yield  # pragma: no cover - makes this an async generator
+
                 return generate()
 
         with tempfile.TemporaryDirectory() as raw:
@@ -104,6 +118,61 @@ class TelegramCommandTests(IsolatedAsyncioTestCase):
             self.assertFalse(await bridge._command("secret", 42, "/summarise this"))
             self.assertEqual(self.sent, [])
 
+    async def test_route_agent_and_new_session_reach_the_agent(self):
+        captured = {}
+
+        class Memory:
+            def new_session(self, source, title):
+                return "fresh-session"
+
+        class Providers:
+            def default_name(self):
+                return "cloud"
+
+            def providers(self):
+                return {"cloud": self.resolve("cloud")}
+
+            def resolve(self, name=None):
+                return SimpleNamespace(
+                    name=name or "cloud",
+                    model="large",
+                    label=f"{name or 'cloud'}:large",
+                )
+
+        class Agent:
+            memory = Memory()
+            providers = Providers()
+
+            def run(self, text, session_id, **kwargs):
+                captured.update(text=text, session_id=session_id, **kwargs)
+
+                async def generate():
+                    yield {"type": "brain", "label": "cloud:large"}
+                    yield {"type": "token", "text": "Sir, done, Sir."}
+
+                return generate()
+
+        with tempfile.TemporaryDirectory() as raw:
+            bridge = TelegramBridge(
+                _config(raw, {"token": "secret", "allowed_chat_ids": [42]}), Agent()
+            )  # type: ignore[arg-type]
+
+            async def capture(*args, **kwargs):
+                return None
+
+            bridge.send = capture  # type: ignore[method-assign]
+            bridge._send_progress = capture  # type: ignore[method-assign]
+            bridge._delete = capture  # type: ignore[method-assign]
+            bridge._edit_progress = capture  # type: ignore[method-assign]
+            self.assertTrue(await bridge._command("secret", 42, "/cloud"))
+            self.assertTrue(await bridge._command("secret", 42, "/agent security"))
+            self.assertTrue(await bridge._command("secret", 42, "/new"))
+            await bridge._reply("secret", 42, "inspect")
+            self.assertEqual(captured["session_id"], "fresh-session")
+            self.assertEqual(captured["provider"], "cloud")
+            self.assertEqual(captured["agent_profile"], "security")
+            self.assertTrue(captured["fresh"])
+
 
 class TelegramConcurrencyTests(IsolatedAsyncioTestCase):
     async def test_a_slow_reply_does_not_block_commands(self):
@@ -119,6 +188,7 @@ class TelegramConcurrencyTests(IsolatedAsyncioTestCase):
                     started.set()
                     await asyncio.sleep(30)
                     yield {"type": "token", "text": "late"}
+
                 return generate()
 
         with tempfile.TemporaryDirectory() as raw:

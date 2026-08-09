@@ -42,7 +42,8 @@ The replacement integrations use these documented defaults: Ollama Cloud
 The one-line installer bootstraps this repository, installs the app/service, and
 does not download a brain. Use `/cloud` for a configured provider or `/gguf` for
 an operator-supplied local model. `/botkey` configures Telegram through the daemon
-RPC; Telegram `/commands` is an alias for `/help`.
+RPC. Telegram publishes real command autocomplete and provides `/local`, `/cloud`,
+`/switch`, `/model`, and `/agent` routing per chat; its tool boundary remains read-only.
 The live stats bar intentionally omits the user's request text so status indicators stay
 compact; it shows phase, request count, tools, tokens, model, queue, and context instead.
 The animated context meter is local-only; cloud mode omits context from the status bar.

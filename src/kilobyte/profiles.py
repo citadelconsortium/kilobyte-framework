@@ -29,7 +29,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class Profile:
     name: str
-    hint: str          # one line shown in menus
+    hint: str  # one line shown in menus
     instructions: str  # injected as a system message when active
     # Tools the profile leans on; empty means all available. Used to focus, not to block.
     tools: tuple[str, ...] = ()
@@ -69,8 +69,10 @@ SECURITY = Profile(
     hint="offensive and defensive security, evidence-driven",
     tools=("run_command", "web_search", "web_fetch", "read_file", "search_files"),
     instructions=(
-        "Security mode — offensive AND defensive. Act on the target(s) the operator gives\n"
-        "you, assuming they are authorised to test them. Every conclusion follows from\n"
+        "Security mode — offensive AND defensive. Act immediately on Sir's own systems,\n"
+        "labs/CTFs, and explicitly authorised assessments. If a real third-party target's\n"
+        "scope is ambiguous, ask one short authorisation/scope question before active\n"
+        "testing; do not turn that check into a lecture. Every conclusion follows from\n"
         "evidence gathered with the tools, never from assumption.\n"
         "Offensive playbook (adapt to the target):\n"
         "  1. Scope — confirm target and objective from the operator.\n"
@@ -89,7 +91,7 @@ SECURITY = Profile(
         "  probe and learn from its actual output. Record verified platform-specific usage\n"
         "  with save_skill so future tool calls are more accurate.\n"
         "- Interpret only what tools actually returned; quote the decisive output.\n"
-        "- Note the authorisation assumption, prefer the least-damaging check that proves the\n"
+        "- Record the authorised scope, prefer the least-damaging check that proves the\n"
         "  point, and never fabricate a finding.\n"
         "- Install tooling only from official repositories — on Arch, pacman and the BlackArch\n"
         "  repository; never the AUR."
@@ -97,14 +99,30 @@ SECURITY = Profile(
 )
 
 MATH = Profile(
-    name="math", hint="verified mathematics and quantitative reasoning", tools=("run_command", "reference", "remember"),
-    instructions=("Math mode. Define variables, units, assumptions and precision. Work symbolically, verify arithmetic with a safe computation or independent method, check dimensions/signs/edge cases, and show concise auditable steps. Never invent a numerical result."),
+    name="math",
+    hint="verified mathematics and quantitative reasoning",
+    tools=("run_command", "reference", "remember"),
+    instructions=(
+        "Math mode. Define variables, units, assumptions and precision. Work symbolically, verify arithmetic with a safe computation or independent method, check dimensions/signs/edge cases, and show concise auditable steps. Never invent a numerical result."
+    ),
 )
 
 ENGINEERING = Profile(
-    name="engineering", hint="cross-discipline engineering analysis and design",
-    tools=("read_file", "write_file", "list_files", "search_files", "run_command", "reference", "web_search", "web_fetch"),
-    instructions=("Engineering mode. Identify discipline, requirements, constraints, interfaces, units, safety factors and standards. State assumptions; distinguish estimates from validated results; verify critical values with calculations or simulations; use authoritative sources; and deliver design, tests, risks, acceptance criteria and rollback."),
+    name="engineering",
+    hint="cross-discipline engineering analysis and design",
+    tools=(
+        "read_file",
+        "write_file",
+        "list_files",
+        "search_files",
+        "run_command",
+        "reference",
+        "web_search",
+        "web_fetch",
+    ),
+    instructions=(
+        "Engineering mode. Identify discipline, requirements, constraints, interfaces, units, safety factors and standards. State assumptions; distinguish estimates from validated results; verify critical values with calculations or simulations; use authoritative sources; and deliver design, tests, risks, acceptance criteria and rollback."
+    ),
 )
 
 SYSTEMS = Profile(
@@ -184,19 +202,149 @@ ORCHESTRATOR = Profile(
 )
 
 PROFILES: dict[str, Profile] = {
-    p.name: p for p in (RESEARCH, CODING, SECURITY, MATH, ENGINEERING, SYSTEMS, GENERAL, CONVERSATION, PRIVATE, ORCHESTRATOR)
+    p.name: p
+    for p in (
+        RESEARCH,
+        CODING,
+        SECURITY,
+        MATH,
+        ENGINEERING,
+        SYSTEMS,
+        GENERAL,
+        CONVERSATION,
+        PRIVATE,
+        ORCHESTRATOR,
+    )
 }
 
 # Keyword hints for auto-selecting a profile when the user has not named one. Deliberately
 # conservative: an unclear request falls through to general rather than a wrong specialist.
 _ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("research", ("research", "find out", "look up", "latest", "news", "compare", "who is", "what is the current")),
-    ("coding", ("code", "bug", "compile", "build", "test", "refactor", "function", "repository", "repo", "stack trace", "error in")),
-    ("security", ("hack", "hacking", "exploit", "vulnerability", "cve", "nmap", "recon", "pentest", "penetration test", "malware", "reverse engineer", "forensic", "payload", "port scan", "privilege escalation")),
-    ("math", ("calculate", "equation", "algebra", "calculus", "integral", "derivative", "probability", "statistics", "matrix", "geometry", "trigonometry", "solve for", "proof")),
-    ("engineering", ("engineer", "engineering", "mechanical", "electrical", "civil", "chemical", "aerospace", "structural", "robotics", "control system", "circuit", "thermodynamic", "materials", "cad", "design review")),
-    ("private", ("anonymous", "anonymously", "incognito", "mask my ip", "hide my ip", "via tor", "through tor", "private search", "untraceable")),
-    ("systems", ("systemd", "service", "ssh", "firewall", "disk", "memory", "process", "log", "network", "docker", "container", "daemon", "install", "package", "pacman", "blackarch", "dependency", "apt", "dnf")),
+    (
+        "research",
+        (
+            "research",
+            "find out",
+            "look up",
+            "latest",
+            "news",
+            "compare",
+            "who is",
+            "what is the current",
+        ),
+    ),
+    (
+        "coding",
+        (
+            "code",
+            "bug",
+            "compile",
+            "build",
+            "test",
+            "refactor",
+            "function",
+            "repository",
+            "repo",
+            "stack trace",
+            "error in",
+        ),
+    ),
+    (
+        "security",
+        (
+            "hack",
+            "hacking",
+            "exploit",
+            "vulnerability",
+            "cve",
+            "nmap",
+            "recon",
+            "pentest",
+            "penetration test",
+            "malware",
+            "reverse engineer",
+            "forensic",
+            "payload",
+            "port scan",
+            "privilege escalation",
+        ),
+    ),
+    (
+        "math",
+        (
+            "calculate",
+            "equation",
+            "algebra",
+            "calculus",
+            "integral",
+            "derivative",
+            "probability",
+            "statistics",
+            "matrix",
+            "geometry",
+            "trigonometry",
+            "solve for",
+            "proof",
+        ),
+    ),
+    (
+        "engineering",
+        (
+            "engineer",
+            "engineering",
+            "mechanical",
+            "electrical",
+            "civil",
+            "chemical",
+            "aerospace",
+            "structural",
+            "robotics",
+            "control system",
+            "circuit",
+            "thermodynamic",
+            "materials",
+            "cad",
+            "design review",
+        ),
+    ),
+    (
+        "private",
+        (
+            "anonymous",
+            "anonymously",
+            "incognito",
+            "mask my ip",
+            "hide my ip",
+            "via tor",
+            "through tor",
+            "private search",
+            "untraceable",
+        ),
+    ),
+    (
+        "systems",
+        (
+            "systemd",
+            "service",
+            "ssh",
+            "firewall",
+            "disk",
+            "memory",
+            "process",
+            "log",
+            "network",
+            "docker",
+            "container",
+            "daemon",
+            "install",
+            "package",
+            "pacman",
+            "blackarch",
+            "dependency",
+            "apt",
+            "dnf",
+        ),
+    ),
 )
 
 
@@ -206,9 +354,17 @@ def select(text: str, explicit: str | None = None) -> Profile:
     even an unrouted request gets intent-understanding and follow-through discipline instead
     of the model being left to trail off."""
     # Friendly aliases so a user's natural word reaches the right specialist.
-    _ALIASES = {"hacking": "security", "hack": "security", "pentest": "security",
-                "chat": "conversation", "convo": "conversation", "auto": "",
-                "anon": "private", "anonymous": "private", "tor": "private"}
+    _ALIASES = {
+        "hacking": "security",
+        "hack": "security",
+        "pentest": "security",
+        "chat": "conversation",
+        "convo": "conversation",
+        "auto": "",
+        "anon": "private",
+        "anonymous": "private",
+        "tor": "private",
+    }
     if explicit:
         explicit = _ALIASES.get(explicit.lower().strip(), explicit.lower().strip())
     if explicit and explicit in PROFILES:

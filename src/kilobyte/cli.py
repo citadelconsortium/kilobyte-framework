@@ -145,7 +145,7 @@ def brain_command(args: argparse.Namespace, settings: Settings) -> int:
 
 def telegram_command(args: argparse.Namespace, settings: Settings) -> int:
     """Manage the Telegram bot without hand-editing JSON. The bridge polls its config
-    every 30s, so these changes take effect without a restart. The file is written 0600
+    after each long poll, so these changes take effect without a restart. The file is written 0600
     because it holds the bot token."""
     import json
     import os
@@ -180,7 +180,7 @@ def telegram_command(args: argparse.Namespace, settings: Settings) -> int:
     if action == "set-token":
         config["token"] = args.token.strip()
         save()
-        print(f"{GREEN}token set{RESET}. The bridge picks it up within 30s.")
+        print(f"{GREEN}token set{RESET}. The bridge picks it up after the current poll (about 10s).")
         return 0
     if action == "allow":
         allowed.append(int(args.chat_id))

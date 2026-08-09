@@ -30,8 +30,9 @@ connects to it over a Unix socket. Launching `kilo` twice does not load the mode
 prompt-processing time not spent. Tool results are compacted, history is budgeted, and
 the prompt prefix is kept stable and cached so the model only processes what is new.
 
-**No cloud fallback.** There is no provider abstraction and no remote inference path. If
-the local model cannot run, Kilobyte says so rather than silently substituting a service.
+**No automatic cloud fallback.** `providers.py` supplies explicit hosted inference, but
+local remains the default when a GGUF is installed. If local inference fails, the framework
+reports it rather than silently sending the prompt elsewhere.
 
 ## Modules
 
@@ -135,14 +136,16 @@ applies only to a message the operator marked, it never triggers automatically o
 local failure, the answering brain is reported in a `brain` event so the interface can
 label it, and with no providers file there is no cloud path at all. Keys are read from a
 `0600` file, sent in a header over HTTPS only, and never logged or placed on a command
-line. Remote (Telegram) callers cannot escalate.
+line. An allow-listed Telegram owner can explicitly choose `/cloud`; the remote tool schema
+remains read-only regardless of which brain answers.
 
 ## Security model
 
 - Paths resolve through `PathPolicy` and must land inside the service user's home or `/tmp`.
 - Commands never use a shell. Explicit `program + argv` only; shell operators are rejected.
-- Commands are classified `safe` / `write` / `elevated` / `destructive`. Anything above
-  `safe` needs an interactive one-shot approval.
+- Commands are classified `safe` / `write` / `elevated` / `destructive`. Unknown programs,
+  interpreters, active network/security tools, and commands that can alter external state
+  are not treated as safe. Each non-safe class has a separate session approval capability.
 - Remote (Telegram) requests are read-only: no terminal, writes, privileges, services,
   packages or process control, enforced in both the schema and the executor.
 - Web fetches resolve DNS and refuse non-global addresses, so the model cannot reach

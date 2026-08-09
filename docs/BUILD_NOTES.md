@@ -3,8 +3,8 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.2.0 · brain `kilobyte-qwen3-1.7b-q4_k_m.gguf` (Qwen3 1.7B Q4_K_M,
-Apache-2.0) · SHA-256 `d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5`
+Framework version 1.13.0 · brain-free distribution (operator-supplied GGUF or explicit
+cloud provider).
 
 ## What is in it
 
@@ -39,6 +39,16 @@ and a stricter read-only policy for anything arriving remotely.
 installer that provisions dependencies, the service user, the model and the service.
 
 ## Changes and why
+
+### 1.13.0: disconnect-safe inference and Telegram cloud control
+
+RPC now observes peer EOF while inference is silent, closes the generator immediately,
+and cancels all client handlers during daemon shutdown. Telegram uses a socket timeout
+longer than its API long-poll, reloads token/allow-list changes live, rotates real sessions
+for `/new`, publishes its command menu, and supports explicit per-chat local/cloud, model,
+and specialist-agent selection while retaining the read-only remote tool boundary.
+Command approvals now distinguish read-only inspection from local/external writes,
+privileged work, and destructive operations; unknown executables are no longer assumed safe.
 
 ### 1.1.0-1.2.0: grounding, autonomy, agents, easy cloud, one-brain docs
 
