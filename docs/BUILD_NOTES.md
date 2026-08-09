@@ -3,7 +3,7 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.13.2 · brain-free distribution (operator-supplied GGUF or explicit
+Framework version 1.13.3 · brain-free distribution (operator-supplied GGUF or explicit
 cloud provider).
 
 ## What is in it
@@ -40,6 +40,16 @@ installer that provisions dependencies, the service user, the model and the serv
 
 ## Changes and why
 
+### 1.13.3: restore the single-box TUI and universal cloud tool compatibility
+
+The full-screen interface is restored to its original one-box turn layout: selected agent,
+active tool manifest, live tool work, and final response all remain inside one **Kilo** box.
+Thinking pauses no longer append rows; leading/repeated provider whitespace is collapsed;
+discarded streamed preambles are truly removed. Cloud models use native tool schemas first,
+then a schema-bearing JSON text protocol when an OpenAI-compatible endpoint rejects native
+tools. The agent recovers XML-function and JSON tool envelopes against the active allow-list,
+and false claims that local TUI tools or the selected agent are unavailable are retried.
+
 ### 1.13.2: deterministic Telegram research follow-through
 
 Research-mode answers are now completion-gated by the framework: a turn must successfully
@@ -58,9 +68,10 @@ names against the active interface schema, and dispatches allowed calls normally
 keeps Telegram read-only even if the model asks for a disallowed tool.
 
 **Presentation and activity.** Telegram uses a fast progress animation plus a separate
-redacted work-log message, and renders common Markdown into safe HTML. The full-screen TUI
-likewise separates live work from the answer and both terminal renderers show complete
-redacted arguments/results. The security agent now learns target-specific approaches via
+redacted work-log message, and renders common Markdown into safe HTML. This release also
+temporarily split full-screen TUI work from its answer; 1.13.3 restores the established
+single Kilo box while retaining complete redacted arguments/results. The security agent now
+learns target-specific approaches via
 skills instead of receiving a canned playbook. Active-route context reporting no longer
 labels a cloud model with the local runtime's 8192-token window.
 Telegram now tracks active and queued work per chat so `/cancel` and the Stop button can

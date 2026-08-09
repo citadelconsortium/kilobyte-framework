@@ -148,7 +148,72 @@ class FakeResearchTools:
         return {"url": arguments["url"], "content": "verified source text"}
 
 
+class CapabilityDenialRuntime:
+    def __init__(self):
+        self.calls = 0
+
+    async def ensure_ready(self):
+        pass
+
+    async def chat_stream(self, payload):
+        self.calls += 1
+        if self.calls == 1:
+            yield {"delta": {"content": "I cannot access tools or agents."}}
+        elif self.calls == 2:
+            yield {"delta": {"tool_calls": [{
+                "index": 0,
+                "id": "system-1",
+                "function": {"name": "system_info", "arguments": "{}"},
+            }]}}
+        else:
+            yield {"delta": {"content": "Machine inspected with the active systems agent."}}
+
+
 class AgentTests(unittest.IsolatedAsyncioTestCase):
+    def test_inline_json_tool_envelope_is_recovered(self):
+        raw = (
+            'Checking.<tool_call>{"name":"web_search","arguments":'
+            '{"query":"current kernel"}}</tool_call>'
+        )
+        clean, calls, rejected, saw = _parse_inline_tool_calls(raw, {"web_search"})
+        self.assertTrue(saw)
+        self.assertEqual(clean, "Checking.")
+        self.assertEqual(rejected, [])
+        self.assertEqual(calls[0]["function"]["name"], "web_search")
+        self.assertEqual(
+            json.loads(calls[0]["function"]["arguments"]),
+            {"query": "current kernel"},
+        )
+
+    async def test_active_agent_and_tools_are_ground_truth_and_false_denial_retries(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            settings = Settings(data_dir=root, config_dir=root, runtime_dir=root, log_dir=root, home=root)
+            memory = MemoryStore(root / "memory.db")
+            tools = ToolRegistry(settings, memory, PermissionManager(root / "policy.json"))
+            runtime = CapabilityDenialRuntime()
+            agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
+            events = [
+                event
+                async for event in agent.run(
+                    "inspect this machine", agent_profile="systems"
+                )
+            ]
+            capability = next(event for event in events if event["type"] == "capabilities")
+            self.assertEqual(capability["agent"], "systems")
+            self.assertIn("system_info", capability["tools"])
+            visible = []
+            for event in events:
+                if event["type"] == "response_reset":
+                    visible.clear()
+                elif event["type"] == "token":
+                    visible.append(event.get("text", ""))
+            answer = "".join(visible)
+            self.assertNotIn("cannot access", answer)
+            self.assertIn("Machine inspected", answer)
+            self.assertEqual(runtime.calls, 3)
+            memory.close()
+
     async def test_research_must_search_fetch_and_clear_unfinished_answers(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

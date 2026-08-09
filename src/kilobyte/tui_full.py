@@ -223,7 +223,11 @@ class KiloApp:
         self._line_buf = ""   # accumulates a streamed line until it can be boxed
         self.usage: dict[str, Any] = {}   # token usage from the last reply
         self._answered = False            # whether the current reply has started printing
-        self._work_open = False           # live machine work uses its own bordered box
+        self._work_split = False           # work/reply divider already rendered this turn
+        self._had_work = False             # live work preceded the final response
+        self._answer_checkpoint: int | None = None
+        self._answer_has_text = False
+        self._answer_blank = False
         self._pending: dict[str, Any] | None = None   # awaited inline input (selector / key)
         self._catalog: dict[str, Any] = {}
         self._cloud_options: list[tuple[str, dict[str, Any]]] = []
@@ -274,9 +278,9 @@ class KiloApp:
             nl = self._line_buf.find("\n")
             if nl >= 0:
                 line, self._line_buf = self._line_buf[:nl], self._line_buf[nl + 1:]
-                self._bline(self._clean_md(line))
+                self._answer_line(self._clean_md(line))
             elif len(self._line_buf) >= inner:
-                self._bline(self._line_buf[:inner])
+                self._answer_line(self._line_buf[:inner])
                 self._line_buf = self._line_buf[inner:]
             else:
                 break
@@ -292,8 +296,20 @@ class KiloApp:
 
     def _flush_boxed(self) -> None:
         if self._line_buf:
-            self._bline(self._clean_md(self._line_buf))
+            self._answer_line(self._clean_md(self._line_buf))
             self._line_buf = ""
+
+    def _answer_line(self, text: str) -> None:
+        """Render reply text without provider-generated vertical whitespace."""
+        if not text.strip():
+            if not self._answer_has_text or self._answer_blank:
+                return
+            self._bline("")
+            self._answer_blank = True
+            return
+        self._bline(text)
+        self._answer_has_text = True
+        self._answer_blank = False
 
     def _input_prompt(self):
         if self.busy:
@@ -986,7 +1002,11 @@ class KiloApp:
         self._active = asyncio.current_task()
         self.tokens = self.tools_used = 0
         self._answered = False
-        self._work_open = False
+        self._work_split = False
+        self._had_work = False
+        self._answer_checkpoint = None
+        self._answer_has_text = False
+        self._answer_blank = False
         self.usage = {}
         self.streaming = False
         self.agent_name = ""
@@ -1013,24 +1033,29 @@ class KiloApp:
                 elif kind == "brain":
                     self.model_name = event.get("label", self.model_name)
                     location = event.get("location", "local")
-                    self._work_line(f"◇ brain  {location} · {event.get('label')}")
+                    if location == "cloud":
+                        self._work_line(f"☁ escalated to {event.get('label')}")
                 elif kind == "agent":
                     self.agent_name = event.get("profile", "")
-                    self._work_line(f"◇ agent  orchestrator → {event.get('profile','')}")
+                    self._work_line(f"◇ {event.get('profile','')} agent active")
+                elif kind == "capabilities":
+                    names = [str(name) for name in event.get("tools") or []]
+                    self._work_line(
+                        f"◇ tools active ({len(names)})  " + " · ".join(names)
+                    )
                 elif kind == "warming":
                     self.phase = "warming cache (one-off)"
                     self._work_line("◌ cache  warming prompt prefix (one-off after a change)")
                 elif kind == "thinking":
                     self.phase = "thinking"
                     self.streaming = False
-                    self._work_line("◌ thinking")
                 elif kind == "token":
                     self._open_answer_box()
                     self.streaming = True
                     self.tokens += 1
                     self._stream_boxed(event.get("text", ""))
                 elif kind == "response_reset":
-                    self._close_answer_box()
+                    self._reset_answer()
                     self._work_line("↻ intercepted model tool markup; dispatching safely")
                 elif kind == "tool_start":
                     self.tools_used += 1
@@ -1054,7 +1079,7 @@ class KiloApp:
                     await writer.drain()
                 elif kind == "done":
                     self._close_answer_box()
-                    self._close_work_box()
+                    self._close_box()
                     self.usage = event.get("usage") or {}
                     break
                 self.app.invalidate()
@@ -1067,25 +1092,25 @@ class KiloApp:
                 writer.close()
             self.busy = self.streaming = False
             self.phase = ""
-            self._append("\n")
             self.app.invalidate()
 
-    def _open_work_box(self) -> None:
-        """Open a dedicated box for the complete, redacted machine activity stream."""
-        if self._work_open:
+    def _open_box(self) -> None:
+        """Open Kilo's one response box for agent, tools, live work, and final text."""
+        if self._answered:
             return
-        self._close_answer_box()
-        self._append("\n" + self._rule("Live work") + "\n")
-        self._work_open = True
+        self._append("\n" + self._rule("Kilo") + "\n")
+        self._answered = True
+        self._line_buf = ""
 
-    def _close_work_box(self) -> None:
-        if not self._work_open:
+    def _close_box(self) -> None:
+        if not self._answered:
             return
         self._append(self._rule() + "\n")
-        self._work_open = False
+        self._answered = False
 
     def _work_line(self, text: str) -> None:
-        self._open_work_box()
+        self._open_box()
+        self._flush_boxed()
         inner = max(1, self._cw() - 3)
         for raw_line in str(text).splitlines() or [""]:
             line = raw_line
@@ -1093,22 +1118,36 @@ class KiloApp:
                 self._bline(line[:inner])
                 line = line[inner:]
             self._bline(line)
+        self._had_work = True
+        self._work_split = False
+        self._answer_checkpoint = None
 
     def _open_answer_box(self) -> None:
-        """Keep the answer visually separate from the machine work log."""
-        if self._answered:
-            return
-        self._close_work_box()
-        self._append("\n" + self._rule("Kilo") + "\n")
-        self._answered = True
-        self._line_buf = ""
+        """Start response text inside the same box as Kilo's live work."""
+        self._open_box()
+        if self._answer_checkpoint is None:
+            self._answer_checkpoint = len(self.output.buffer.text)
+            self._answer_has_text = False
+            self._answer_blank = False
+        if self._had_work and not self._work_split:
+            self._bline("┈" * max(4, self._cw() - 4))
+            self._work_split = True
 
     def _close_answer_box(self) -> None:
         if not self._answered:
             return
         self._flush_boxed()
-        self._append(self._rule() + "\n")
-        self._answered = False
+
+    def _reset_answer(self) -> None:
+        """Really retract a streamed preamble while retaining earlier work rows."""
+        if self._answer_checkpoint is not None:
+            text = self.output.buffer.text[: self._answer_checkpoint]
+            self.output.buffer.set_document(Document(text, len(text)), bypass_readonly=True)
+        self._line_buf = ""
+        self._answer_checkpoint = None
+        self._answer_has_text = False
+        self._answer_blank = False
+        self._work_split = False
 
     def _short_model(self) -> str:
         """A compact brain label for the status bar so long cloud ids never crowd it."""
