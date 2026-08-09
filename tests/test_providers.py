@@ -127,6 +127,19 @@ class ProviderConfigureTests(unittest.TestCase):
             prov = registry.configure("huggingface", "hf_test")
             self.assertEqual(prov.base_url, "https://router.huggingface.co/v1")
             self.assertIn("Coder", prov.model)
+    def test_new_openai_compatible_catalog_providers_have_correct_endpoints(self):
+        with tempfile.TemporaryDirectory() as raw:
+            registry = ProviderRegistry(Path(raw) / "providers.json")
+            expected = {
+                "nvidia": ("https://integrate.api.nvidia.com/v1", "Authorization"),
+                "zai": ("https://api.z.ai/api/paas/v4", "Authorization"),
+                "ainative": ("https://api.ainative.studio/v1", "X-API-Key"),
+                "speka": ("https://speka.me/v1", "Authorization"),
+            }
+            for name, (base_url, auth_header) in expected.items():
+                prov = registry.configure(name, "test-key")
+                self.assertEqual(prov.base_url, base_url)
+                self.assertEqual(prov.auth_header, auth_header)
 
     def test_cloudflare_requires_account_scoped_configuration(self):
         with tempfile.TemporaryDirectory() as raw:

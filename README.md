@@ -32,7 +32,7 @@ The installer sets up the app, dependencies, and the service in a single pass. *
 
 ## Bring your own model
 - **A local GGUF** — download any GGUF (HuggingFace, etc.) into `~/` or `~/Downloads`, then run **`/gguf`** in the TUI to browse and load it. ⚠️ **Only load a model your machine can actually run** — the picker shows your free RAM, and a GGUF larger than that will fail to load or run unusably slow (a bad load auto-rolls-back to the previous brain). Or: `kilo brain deploy /path/to/model.gguf`.
-- **A cloud model** (first-class here) — **`/cloud`** to pick a provider and paste a key: OpenRouter, OpenAI, Anthropic, Groq, DeepSeek, Together, Mistral, xAI, Gemini, Cerebras, Fireworks, Perplexity, Nebius, Hyperbolic. Change a key anytime with **`/cloud key`**.
+- **A cloud model** (first-class here) — **`/cloud`** to pick a provider and paste a key: OpenRouter, OpenAI, Anthropic, Groq, DeepSeek, Together, Mistral, xAI, Gemini, Cerebras, Fireworks, Perplexity, Nebius, Hyperbolic, NVIDIA NIM, Z.AI/GLM, AI Native Studio, and Speka. AI Native Studio uses its documented `X-API-Key` header; the others use Bearer authentication. Change a key anytime with **`/cloud key`**.
 
 ## Docs
 See [`docs/`](docs/) — architecture and build notes carry over from [Kilobyte](https://github.com/citadelconsortium/kilobyte). The only difference in this repo is that **no brain is bundled**; everything else is the same framework.

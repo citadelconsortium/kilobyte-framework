@@ -71,6 +71,7 @@ class Provider:
     api_key: str
     model: str
     timeout: int = 120
+    auth_header: str = "Authorization"
 
     @property
     def label(self) -> str:
@@ -102,6 +103,10 @@ KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
     # Workers AI's endpoint is account-scoped. configure() resolves the account from
     # KILOBYTE_CLOUDFLARE_ACCOUNT_ID; a raw providers.json may also set its own URL.
     "cloudflare": {"label": "Cloudflare Workers AI", "base_url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1", "model": "@cf/meta/llama-3.1-8b-instruct"},
+    "nvidia": {"label": "NVIDIA NIM", "base_url": "https://integrate.api.nvidia.com/v1", "model": "deepseek-ai/deepseek-v4-flash"},
+    "zai": {"label": "Z.AI (GLM)", "base_url": "https://api.z.ai/api/paas/v4", "model": "glm-4.7-flash"},
+    "ainative": {"label": "AI Native Studio", "base_url": "https://api.ainative.studio/v1", "model": "qwen3-32b", "auth_header": "X-API-Key"},
+    "speka": {"label": "Speka", "base_url": "https://speka.me/v1", "model": "meta/llama-3.1-8b-instruct"},
 }
 
 
@@ -143,7 +148,11 @@ class ProviderRegistry:
                 # A key would otherwise be sent in clear text.
                 log.warning("provider %s must use https; skipped", name)
                 continue
-            found[str(name)] = Provider(str(name), base_url, key, model, int(entry.get("timeout", 120)))
+            auth_header = str(entry.get("auth_header", "Authorization")).strip()
+            if auth_header not in {"Authorization", "X-API-Key"}:
+                log.warning("provider %s has unsupported auth header; skipped", name)
+                continue
+            found[str(name)] = Provider(str(name), base_url, key, model, int(entry.get("timeout", 120)), auth_header)
         return found
 
     def configure(self, name: str, api_key: str, model: str | None = None, account_id: str | None = None) -> Provider:
@@ -156,6 +165,7 @@ class ProviderRegistry:
         name = name.strip().lower()
         known = KNOWN_PROVIDERS.get(name, {})
         base_url = known.get("base_url", "https://openrouter.ai/api/v1")
+        auth_header = known.get("auth_header", "Authorization")
         if name == "cloudflare":
             account_id = (account_id or os.environ.get("KILOBYTE_CLOUDFLARE_ACCOUNT_ID", "")).strip()
             if not account_id or not account_id.replace("-", "").isalnum():
@@ -171,6 +181,7 @@ class ProviderRegistry:
             "base_url": base_url,
             "api_key": api_key.strip(),
             "model": chosen_model,
+            "auth_header": auth_header,
             "enabled": True,
         }
         raw["default"] = name
@@ -196,7 +207,7 @@ class ProviderRegistry:
             url = f"{prov.base_url}/models"
         req = urllib.request.Request(
             url,
-            headers={"Authorization": f"Bearer {prov.api_key}", "Accept": "application/json", "User-Agent": _USER_AGENT, **_ATTRIBUTION},
+            headers={prov.auth_header: f"Bearer {prov.api_key}" if prov.auth_header == "Authorization" else prov.api_key, "Accept": "application/json", "User-Agent": _USER_AGENT, **_ATTRIBUTION},
         )
         free_ids: list[str] = []
         try:
@@ -323,7 +334,7 @@ class ProviderRegistry:
                 # The key goes in a header, never a command line or a log.
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {provider.api_key}",
+                    provider.auth_header: f"Bearer {provider.api_key}" if provider.auth_header == "Authorization" else provider.api_key,
                     "Accept": "text/event-stream",
                     "User-Agent": _USER_AGENT,
                     **_ATTRIBUTION,
