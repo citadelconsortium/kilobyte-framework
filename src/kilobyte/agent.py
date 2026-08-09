@@ -158,10 +158,12 @@ class Agent:
         # Surfacing a matching procedure is cheaper than making the model rediscover it:
         # a few hundred tokens of known-good steps against several planning rounds, each
         # of which costs a full generation on slow hardware.
-        skills = self.memory.recall_skills(text)
+        # Keep learned procedures useful without allowing a verbose skill to consume the
+        # model's context. Two short, relevant procedures beat three full documents.
+        skills = self.memory.recall_skills(text, limit=2)
         if skills:
             rendered = "\n\n".join(
-                f"{skill['name']} (use when: {skill['when_to_use']})\n{skill['steps']}" for skill in skills
+                f"{skill['name']} (use when: {skill['when_to_use'][:240]})\n{skill['steps'][:900]}" for skill in skills
             )
             messages.append({
                 "role": "system",
