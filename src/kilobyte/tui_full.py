@@ -21,6 +21,7 @@ forwards keystrokes, so the interface stays responsive while a reply streams.
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import json
 import re
 import shutil
@@ -683,7 +684,9 @@ class KiloApp:
         lines = ["\npast sessions — /chat <n> to resume:"]
         for i, s in enumerate(self._sessions, 1):
             title = (s.get("title") or "").strip() or "(untitled)"
-            lines.append(f"  {i:>2}. {title[:56]}  · {s.get('messages',0)} msgs")
+            stamp = s.get("updated_at")
+            when = _dt.datetime.fromtimestamp(float(stamp)).strftime("%Y-%m-%d %H:%M") if stamp else "unknown time"
+            lines.append(f"  {i:>2}. {when}  {title[:48]}  · {s.get('messages',0)} msgs")
         self._append("\n".join(lines) + "\n")
 
     async def _kilochats(self) -> None:
