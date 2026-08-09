@@ -89,6 +89,12 @@ class ProviderConfigureTests(unittest.TestCase):
             with self.assertRaises(ProviderError):
                 registry.configure("cloudflare", "cf_test")
 
+    def test_cloudflare_configures_with_account_id_and_token(self):
+        with tempfile.TemporaryDirectory() as raw:
+            registry = ProviderRegistry(Path(raw) / "providers.json")
+            prov = registry.configure("cloudflare", "cf_test", account_id="abc123")
+            self.assertEqual(prov.base_url, "https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1")
+
     def test_configure_from_just_a_key_uses_catalog_and_sets_default(self):
         """A user supplies only an API key; base_url and model come from the catalog, and
         the provider becomes the default so /cloud reaches it immediately."""

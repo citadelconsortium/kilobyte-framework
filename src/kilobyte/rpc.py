@@ -98,6 +98,7 @@ class RPCServer:
                     prov = self.agent.providers.configure(
                         str(request.get("name", "")), str(request.get("api_key", "")),
                         request.get("model") or None,
+                        request.get("account_id") or None,
                     )
                     await self._send(writer, {"type": "result", "data": {"ok": True, "label": prov.label, "name": prov.name}})
                 except Exception as exc:

@@ -123,7 +123,7 @@ class ProviderRegistry:
             found[str(name)] = Provider(str(name), base_url, key, model, int(entry.get("timeout", 120)))
         return found
 
-    def configure(self, name: str, api_key: str, model: str | None = None) -> Provider:
+    def configure(self, name: str, api_key: str, model: str | None = None, account_id: str | None = None) -> Provider:
         """Add or update a provider from just an API key (and optional model), using the
         catalog for the base URL and default model, then make it the default. Written 0600
         because it holds the key. Takes effect immediately: the registry reads the file live.
@@ -134,9 +134,9 @@ class ProviderRegistry:
         known = KNOWN_PROVIDERS.get(name, {})
         base_url = known.get("base_url", "https://openrouter.ai/api/v1")
         if name == "cloudflare":
-            account_id = os.environ.get("KILOBYTE_CLOUDFLARE_ACCOUNT_ID", "").strip()
+            account_id = (account_id or os.environ.get("KILOBYTE_CLOUDFLARE_ACCOUNT_ID", "")).strip()
             if not account_id or not account_id.replace("-", "").isalnum():
-                raise ProviderError("Cloudflare needs KILOBYTE_CLOUDFLARE_ACCOUNT_ID (or configure its account-scoped base_url manually)")
+                raise ProviderError("Cloudflare needs its account ID as well as the API token")
             base_url = base_url.replace("{account_id}", account_id)
         chosen_model = (model or known.get("model") or "").strip()
         if not api_key.strip():
