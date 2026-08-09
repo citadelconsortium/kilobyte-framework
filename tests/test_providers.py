@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kilobyte.providers import ProviderError, ProviderRegistry
+from kilobyte.providers import ProviderError, ProviderRegistry, _model_ids
 
 
 def _config(raw: str, payload: dict) -> Path:
@@ -13,6 +13,10 @@ def _config(raw: str, payload: dict) -> Path:
 
 
 class ProviderConfigTests(unittest.TestCase):
+    def test_model_catalogue_shapes_are_normalised(self):
+        self.assertEqual(_model_ids({"data": [{"id": "a"}]}), ["a"])
+        self.assertEqual(_model_ids({"models": [{"name": "b"}]}), ["b"])
+        self.assertEqual(_model_ids({"result": ["c"]}), ["c"])
     def test_absent_config_means_no_cloud_path_at_all(self):
         """Cloud must be off unless it was deliberately configured."""
         with tempfile.TemporaryDirectory() as raw:
