@@ -388,6 +388,9 @@ class KiloApp:
         qn = self._queue.qsize() if getattr(self, "_queue", None) else 0
         if qn:
             bar += [("class:stat.k", "   ⧉ queued "), ("class:stat", f"{qn}")]
+        bg = len(getattr(self, "_bg_tasks", ()))
+        if bg:
+            bar += [("class:stat.k", "   ◌ background "), ("class:stat", str(bg))]
         if self.private_mode:
             bar += [("class:stat.k", "   🛡 "), ("class:kilo", "private")]
         ctx = (self.status.get("profile") or {}).get("context_size")
