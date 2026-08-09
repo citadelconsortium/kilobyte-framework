@@ -143,6 +143,20 @@ class ProviderConfigureTests(unittest.TestCase):
                 self.assertEqual(prov.base_url, base_url)
                 self.assertEqual(prov.auth_header, auth_header)
 
+    def test_replacement_catalogues_are_fetched_from_models_endpoint(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def read(self): return b'{"data": [{"id": "live/model"}]}'
+        with tempfile.TemporaryDirectory() as raw:
+            registry = ProviderRegistry(Path(raw) / "providers.json")
+            for name in ("ollama", "agnes", "modelscope", "llm7", "opencode_zen", "glhf"):
+                registry.configure(name, "test-key")
+                with patch("urllib.request.urlopen", return_value=Response()) as opened:
+                    expected = sorted({"live/model", registry.resolve(name).model})
+                    self.assertEqual(registry.list_models(name, only_free=False), expected)
+                    self.assertTrue(opened.call_args.args[0].full_url.endswith("/models"))
+
     def test_cloudflare_requires_account_scoped_configuration(self):
         with tempfile.TemporaryDirectory() as raw:
             registry = ProviderRegistry(Path(raw) / "providers.json")
