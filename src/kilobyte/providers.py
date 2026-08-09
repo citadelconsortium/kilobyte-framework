@@ -79,6 +79,10 @@ KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
     "cohere": {"label": "Cohere", "base_url": "https://api.cohere.com/compatibility/v1", "model": "command-a-03-2025"},
     "sambanova": {"label": "SambaNova", "base_url": "https://api.sambanova.ai/v1", "model": "Meta-Llama-3.3-70B-Instruct"},
     "qwen": {"label": "Alibaba Qwen", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
+    "huggingface": {"label": "Hugging Face Inference Providers", "base_url": "https://router.huggingface.co/v1", "model": "Qwen/Qwen2.5-Coder-32B-Instruct"},
+    # Workers AI's endpoint is account-scoped. configure() resolves the account from
+    # KILOBYTE_CLOUDFLARE_ACCOUNT_ID; a raw providers.json may also set its own URL.
+    "cloudflare": {"label": "Cloudflare Workers AI", "base_url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1", "model": "@cf/meta/llama-3.1-8b-instruct"},
 }
 
 
@@ -129,6 +133,11 @@ class ProviderRegistry:
         name = name.strip().lower()
         known = KNOWN_PROVIDERS.get(name, {})
         base_url = known.get("base_url", "https://openrouter.ai/api/v1")
+        if name == "cloudflare":
+            account_id = os.environ.get("KILOBYTE_CLOUDFLARE_ACCOUNT_ID", "").strip()
+            if not account_id or not account_id.replace("-", "").isalnum():
+                raise ProviderError("Cloudflare needs KILOBYTE_CLOUDFLARE_ACCOUNT_ID (or configure its account-scoped base_url manually)")
+            base_url = base_url.replace("{account_id}", account_id)
         chosen_model = (model or known.get("model") or "").strip()
         if not api_key.strip():
             raise ProviderError("an API key is required")
