@@ -1069,8 +1069,7 @@ class KiloApp:
         never floating under the owner's input box."""
         if self._answered:
             return
-        label = f"\u2601 {self.cloud_provider}" if self.cloud_active else "Kilo"
-        self._append("\n" + self._rule(label) + "\n")
+        self._append("\n" + self._rule("Kilo") + "\n")
         self._answered = True
         self._work_split = False
         self._line_buf = ""
