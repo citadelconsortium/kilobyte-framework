@@ -348,7 +348,9 @@ class KiloApp:
             line = info[i] if i < len(info) else []
             rows += line
             if show_mascot:
-                pad = max(2, 48 - self._seg_len(line))
+                # Keep the animated mascot on the actual right edge, not at a
+                # hard-coded column that drifts with terminal size/font width.
+                pad = max(2, self._cw() - len(art) - self._seg_len(line) - 9 - 4)
                 rows.append(("class:banner", " " * pad))
                 rows += self._mascot(i)
             rows.append(("", "\n"))
