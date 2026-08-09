@@ -106,6 +106,8 @@ STYLE = Style.from_dict({
 
 
 _COMMANDS = [
+    ("/commands", "show every TUI command"),
+    ("/help", "show command help"),
     ("/effort ", "high | medium | low — reply depth vs speed"),
     ("/agent ", "force a specialist: orchestrator research coding security systems private"),
     ("/chats", "list past sessions to resume"),
@@ -116,6 +118,8 @@ _COMMANDS = [
     ("/cloudswitch", "select or reconfigure the active cloud provider"),
     ("/switch", "flip between cloud and local Kilo (Kilo default)"),
     ("/model ", "change the cloud model"),
+    ("/chat ", "open a past chat by number"),
+    ("/kchats", "browse past chats (alias for /kilochats)"),
     ("/gguf", "browse downloaded .gguf files and load one as the brain"),
     ("/private ", "on | off | rotate — mask web through Tor"),
     ("/cancel", "stop the running request and clear the queue"),
@@ -123,6 +127,8 @@ _COMMANDS = [
     ("/clear", "clear the screen"),
     ("/help", "list commands"),
     ("/quit", "exit Kilo"),
+    ("/exit", "exit Kilo (alias)"),
+    ("/q", "exit Kilo (alias)"),
 ]
 
 
