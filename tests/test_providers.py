@@ -85,6 +85,11 @@ class ProviderConfigureTests(unittest.TestCase):
             prov = ProviderRegistry(Path(raw) / "providers.json").configure("groq", "gsk_test")
             self.assertEqual(prov.base_url, "https://api.groq.com/openai/v1")
             self.assertEqual(prov.model, "llama-3.1-8b-instant")
+
+    def test_groq_retired_model_is_migrated_on_read(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = _config(raw, {"providers": {"groq": {"api_key": "gsk_test", "model": "llama-3.3-70b-versatile"}}})
+            self.assertEqual(ProviderRegistry(path).resolve().model, "llama-3.1-8b-instant")
     def test_huggingface_catalog_uses_router_api(self):
         with tempfile.TemporaryDirectory() as raw:
             registry = ProviderRegistry(Path(raw) / "providers.json")
