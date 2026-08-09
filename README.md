@@ -18,7 +18,7 @@
 
 ## Why this framework beats the rest
 - **It acts, it doesn’t just talk** — cloud and local models get the *same* real tools and are told, emphatically, that their tools execute on the machine. They work **until the task is done**, not until a step counter runs out.
-- **Any model, one harness** — a local GGUF *or* 20 OpenAI-compatible cloud providers, swapped live.
+- **Any model, one harness** — a local GGUF *or* 25 OpenAI-compatible cloud providers, swapped live.
 - **Grounded** — an orchestrator commissions specialist agents (research, coding, security, systems, private) over an offline how-to bank, and the framework auto-recalls prior conversation, facts, and saved skills every turn.
 - **Efficient** — bounded history, compacted tool results, and reasoning-token stripping keep cloud usage lean.
 - **Production-ready** — one-command installer, versioned deploys with auto-rollback, 100+ tests, systemd.
