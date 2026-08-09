@@ -803,7 +803,11 @@ class KiloApp:
                 self.model_name = Path(str(st.get("model", ""))).stem or self.model_name
         except (ConnectionError, FileNotFoundError, OSError):
             pass
-        self.app.invalidate()
+        # Unit tests and headless callers can exercise cloud switching before the
+        # prompt_toolkit Application is attached; refreshing the label must stay safe.
+        app = getattr(self, "app", None)
+        if app is not None:
+            app.invalidate()
 
     async def _model_picker(self) -> None:
         try:
