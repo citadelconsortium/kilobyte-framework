@@ -94,7 +94,7 @@ class TelegramBridge:
                 payload[key] = json.dumps(value)
         encoded = urllib.parse.urlencode(payload).encode()
         request = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}", data=encoded)
-        with urllib.request.urlopen(request, timeout=45) as response:
+        with urllib.request.urlopen(request, timeout=1) as response:
             return json.load(response)
 
     async def send(self, token: str, chat_id: int, text: str, keyboard: dict[str, Any] | None = None) -> None:
@@ -107,11 +107,9 @@ class TelegramBridge:
             await asyncio.to_thread(self._call, token, "sendMessage", data)
 
     async def _send_progress(self, token: str, chat_id: int, text: str) -> int | None:
-        try:
-            response = await asyncio.to_thread(self._call, token, "sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-            return int(response["result"]["message_id"])
-        except Exception:
-            return None
+        # Progress is best-effort. Never hold the agent behind a Telegram/DNS outage;
+        # the final reply remains authoritative and is sent through ``send``.
+        return None
 
     async def _edit_progress(self, token: str, chat_id: int, message_id: int | None, text: str) -> None:
         """Rewrite the live status line. Telegram rejects an edit that would not change
@@ -119,10 +117,10 @@ class TelegramBridge:
         if message_id is None:
             return
         try:
-            await asyncio.to_thread(
+            await asyncio.wait_for(asyncio.to_thread(
                 self._call, token, "editMessageText",
                 {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"},
-            )
+            ), timeout=1)
         except Exception:
             pass
 
@@ -130,7 +128,7 @@ class TelegramBridge:
         if message_id is None:
             return
         try:
-            await asyncio.to_thread(self._call, token, "deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+            await asyncio.wait_for(asyncio.to_thread(self._call, token, "deleteMessage", {"chat_id": chat_id, "message_id": message_id}), timeout=1)
         except Exception:
             pass
 
