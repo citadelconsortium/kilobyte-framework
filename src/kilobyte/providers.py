@@ -103,10 +103,12 @@ KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
     # Workers AI's endpoint is account-scoped. configure() resolves the account from
     # KILOBYTE_CLOUDFLARE_ACCOUNT_ID; a raw providers.json may also set its own URL.
     "cloudflare": {"label": "Cloudflare Workers AI", "base_url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1", "model": "@cf/meta/llama-3.1-8b-instruct"},
-    "nvidia": {"label": "NVIDIA NIM", "base_url": "https://integrate.api.nvidia.com/v1", "model": "deepseek-ai/deepseek-v4-flash"},
-    "zai": {"label": "Z.AI (GLM)", "base_url": "https://api.z.ai/api/paas/v4", "model": "glm-4.7-flash"},
-    "ainative": {"label": "AI Native Studio", "base_url": "https://api.ainative.studio/v1", "model": "qwen3-32b", "auth_header": "X-API-Key"},
-    "speka": {"label": "Speka", "base_url": "https://speka.me/v1", "model": "meta/llama-3.1-8b-instruct"},
+    "ollama": {"label": "Ollama Cloud", "base_url": "https://ollama.com/v1", "model": "gpt-oss:120b"},
+    "agnes": {"label": "Agnes AI", "base_url": "https://apihub.agnes-ai.com/v1", "model": "agnes-2.0-flash"},
+    "modelscope": {"label": "ModelScope", "base_url": "https://api-inference.modelscope.cn/v1", "model": "Qwen/Qwen3-32B"},
+    "llm7": {"label": "LLM7.io", "base_url": "https://api.llm7.io/v1", "model": "fast"},
+    "opencode_zen": {"label": "OpenCode Zen", "base_url": "https://opencode.ai/zen/v1", "model": "big-pickle"},
+    "glhf": {"label": "GLHF.chat", "base_url": "https://glhf.chat/api/openai/v1", "model": "hf:meta-llama/Llama-3.3-70B-Instruct"},
 }
 
 
