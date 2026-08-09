@@ -3,7 +3,7 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.13.3 · brain-free distribution (operator-supplied GGUF or explicit
+Framework version 1.13.4 · brain-free distribution (operator-supplied GGUF or explicit
 cloud provider).
 
 ## What is in it
@@ -39,6 +39,15 @@ and a stricter read-only policy for anything arriving remotely.
 installer that provisions dependencies, the service user, the model and the service.
 
 ## Changes and why
+
+### 1.13.4: exact v1.13.0 TUI restoration
+
+`tui_full.py` is restored byte-for-byte from the v1.13.0 Git release object. This returns
+the established output exactly: `◇ orchestrator → … agent`, `◈` live tool rows, result
+rows, the faint divider, and Kilo's response all inside one Kilo box. The v1.13.3 attempt
+recreated the layout but changed its rows and whitespace; those changes are removed. Cloud
+native/JSON/XML tool compatibility remains below the presentation layer and does not alter
+the old TUI output.
 
 ### 1.13.3: restore the single-box TUI and universal cloud tool compatibility
 
