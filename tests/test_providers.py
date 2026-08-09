@@ -76,6 +76,19 @@ if __name__ == "__main__":
 
 
 class ProviderConfigureTests(unittest.TestCase):
+    def test_huggingface_catalog_uses_router_api(self):
+        with tempfile.TemporaryDirectory() as raw:
+            registry = ProviderRegistry(Path(raw) / "providers.json")
+            prov = registry.configure("huggingface", "hf_test")
+            self.assertEqual(prov.base_url, "https://router.huggingface.co/v1")
+            self.assertIn("Coder", prov.model)
+
+    def test_cloudflare_requires_account_scoped_configuration(self):
+        with tempfile.TemporaryDirectory() as raw:
+            registry = ProviderRegistry(Path(raw) / "providers.json")
+            with self.assertRaises(ProviderError):
+                registry.configure("cloudflare", "cf_test")
+
     def test_configure_from_just_a_key_uses_catalog_and_sets_default(self):
         """A user supplies only an API key; base_url and model come from the catalog, and
         the provider becomes the default so /cloud reaches it immediately."""
