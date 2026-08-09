@@ -109,7 +109,7 @@ _COMMANDS = [
     ("/commands", "show every TUI command"),
     ("/help", "show command help"),
     ("/effort ", "high | medium | low — reply depth vs speed"),
-    ("/agent ", "force a specialist: orchestrator research coding security systems private"),
+    ("/agent ", "force a specialist: orchestrator research coding security math engineering systems private"),
     ("/chats", "list past sessions to resume"),
     ("/kilochats", "browse past chats; type a number to continue one"),
     ("/cloud key", "add or change a provider API key"),
@@ -534,7 +534,7 @@ class KiloApp:
             self._append(
                 "\ncommands:\n"
                 "  /effort high|medium|low   depth vs speed of replies\n"
-                "  /agent <name>|off         force research|coding|security|systems, or auto\n"
+                "  /agent <name>|off         force research|coding|security|math|engineering|systems, or auto\n"
                 "  /chats · /kilochats       list past chats; type a number to continue one\n"
                 "  /chat <n>                 open a past session by number\n"
                 "  /cloud [question]         set up / use a cloud model (key selector)\n"
@@ -573,7 +573,7 @@ class KiloApp:
             name = {"hacking": "security", "hack": "security", "pentest": "security",
                     "chat": "conversation", "convo": "conversation", "anon": "private",
                     "tor": "private", "orchestrate": "orchestrator", "router": "orchestrator"}.get(name, name)
-            valid = {"research", "coding", "security", "systems", "general", "conversation",
+            valid = {"research", "coding", "security", "math", "engineering", "systems", "general", "conversation",
                      "private", "orchestrator"}
             if name in {"", "off", "auto"}:
                 self.forced_profile = ""

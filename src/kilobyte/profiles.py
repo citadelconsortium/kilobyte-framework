@@ -96,6 +96,17 @@ SECURITY = Profile(
     ),
 )
 
+MATH = Profile(
+    name="math", hint="verified mathematics and quantitative reasoning", tools=("run_command", "reference", "remember"),
+    instructions=("Math mode. Define variables, units, assumptions and precision. Work symbolically, verify arithmetic with a safe computation or independent method, check dimensions/signs/edge cases, and show concise auditable steps. Never invent a numerical result."),
+)
+
+ENGINEERING = Profile(
+    name="engineering", hint="cross-discipline engineering analysis and design",
+    tools=("read_file", "write_file", "list_files", "search_files", "run_command", "reference", "web_search", "web_fetch"),
+    instructions=("Engineering mode. Identify discipline, requirements, constraints, interfaces, units, safety factors and standards. State assumptions; distinguish estimates from validated results; verify critical values with calculations or simulations; use authoritative sources; and deliver design, tests, risks, acceptance criteria and rollback."),
+)
+
 SYSTEMS = Profile(
     name="systems",
     hint="live-machine diagnosis",
@@ -173,7 +184,7 @@ ORCHESTRATOR = Profile(
 )
 
 PROFILES: dict[str, Profile] = {
-    p.name: p for p in (RESEARCH, CODING, SECURITY, SYSTEMS, GENERAL, CONVERSATION, PRIVATE, ORCHESTRATOR)
+    p.name: p for p in (RESEARCH, CODING, SECURITY, MATH, ENGINEERING, SYSTEMS, GENERAL, CONVERSATION, PRIVATE, ORCHESTRATOR)
 }
 
 # Keyword hints for auto-selecting a profile when the user has not named one. Deliberately
@@ -182,6 +193,8 @@ _ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("research", ("research", "find out", "look up", "latest", "news", "compare", "who is", "what is the current")),
     ("coding", ("code", "bug", "compile", "build", "test", "refactor", "function", "repository", "repo", "stack trace", "error in")),
     ("security", ("hack", "hacking", "exploit", "vulnerability", "cve", "nmap", "recon", "pentest", "penetration test", "malware", "reverse engineer", "forensic", "payload", "port scan", "privilege escalation")),
+    ("math", ("calculate", "equation", "algebra", "calculus", "integral", "derivative", "probability", "statistics", "matrix", "geometry", "trigonometry", "solve for", "proof")),
+    ("engineering", ("engineer", "engineering", "mechanical", "electrical", "civil", "chemical", "aerospace", "structural", "robotics", "control system", "circuit", "thermodynamic", "materials", "cad", "design review")),
     ("private", ("anonymous", "anonymously", "incognito", "mask my ip", "hide my ip", "via tor", "through tor", "private search", "untraceable")),
     ("systems", ("systemd", "service", "ssh", "firewall", "disk", "memory", "process", "log", "network", "docker", "container", "daemon", "install", "package", "pacman", "blackarch", "dependency", "apt", "dnf")),
 )
