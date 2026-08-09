@@ -395,17 +395,10 @@ class KiloApp:
         if self.private_mode:
             bar += [("class:stat.k", "   🛡 "), ("class:kilo", "private")]
         ctx = (self.status.get("profile") or {}).get("context_size")
-        if ctx:
+        if ctx and not self.cloud_active:
             used = (self.usage or {}).get("total_tokens")
-            cloud_ctx = self.status.get("cloud_context_limit")
-            if self.cloud_active and cloud_ctx:
+            if not self.cloud_active:
                 used = int((self.usage or {}).get("total_tokens") or 0)
-                ratio = min(1.0, used / max(1, int(cloud_ctx)))
-                filled = round(ratio * 8)
-                meter = "".join("█" if i < filled else "░" for i in range(8))
-                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", f"{meter} {used}/{cloud_ctx}")]
-            else:
-                used = int(used or 0)
                 ratio = min(1.0, used / max(1, int(ctx)))
                 filled = round(ratio * 8)
                 meter = "".join("█" if i < filled else "░" for i in range(8))
