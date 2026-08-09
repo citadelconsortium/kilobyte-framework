@@ -3,7 +3,7 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.13.5 · brain-free distribution (operator-supplied GGUF or explicit
+Framework version 1.13.6 · brain-free distribution (operator-supplied GGUF or explicit
 cloud provider).
 
 ## What is in it
@@ -39,6 +39,17 @@ and a stricter read-only policy for anything arriving remotely.
 installer that provisions dependencies, the service user, the model and the service.
 
 ## Changes and why
+
+### 1.13.6: Telegram machine tools with in-chat approval
+
+Allow-listed Telegram chats now receive the full built-in tool schema, including
+`run_command` and `write_file`. Safe inspection executes directly; write, outward,
+elevated, and destructive actions wait for one-time Approve/Deny buttons tied to the same
+chat and expire after 280 seconds. Shell operators and allowed-root enforcement remain in
+the deterministic command/file layer. Missing model tool arguments now return the required
+field names instead of a bare `KeyError`, giving every local or cloud model an actionable
+retry. Bounded atomic writes execute directly so they cannot stall behind a constrained
+VM thread pool after a command. The v1.13.5 Pygments TUI is included; no bundled GGUF is required.
 
 ### 1.13.5: language-aware code output
 
@@ -83,7 +94,8 @@ recorded as a completed task.
 `<tool_call>` blocks in ordinary content instead of native `delta.tool_calls`. The agent
 now guards the stream, removes that protocol from user-visible output, validates recovered
 names against the active interface schema, and dispatches allowed calls normally. This
-keeps Telegram read-only even if the model asks for a disallowed tool.
+kept Telegram read-only in that release even if the model asked for a disallowed tool;
+1.13.6 replaces that boundary with chat-bound approvals.
 
 **Presentation and activity.** Telegram uses a fast progress animation plus a separate
 redacted work-log message, and renders common Markdown into safe HTML. This release also
@@ -101,7 +113,8 @@ RPC now observes peer EOF while inference is silent, closes the generator immedi
 and cancels all client handlers during daemon shutdown. Telegram uses a socket timeout
 longer than its API long-poll, reloads token/allow-list changes live, rotates real sessions
 for `/new`, publishes its command menu, and supports explicit per-chat local/cloud, model,
-and specialist-agent selection while retaining the read-only remote tool boundary.
+and specialist-agent selection while retaining the then-read-only remote tool boundary
+(superseded by 1.13.6 approval buttons).
 Command approvals now distinguish read-only inspection from local/external writes,
 privileged work, and destructive operations; unknown executables are no longer assumed safe.
 
@@ -148,7 +161,8 @@ Bearer authentication. `/switch` flips the active brain between that provider an
 **Telegram redesign + management.** Animated progress card (spinner, phase icon, elapsed,
 tools), branded help/status/answer cards, a memory meter, `/id`, richer buttons — and a
 `kilo telegram status|set-token|allow|disallow|disable` CLI so the bot is managed without
-hand-editing JSON (config is polled live, no restart). Telegram stays strictly read-only.
+hand-editing JSON (config is polled live, no restart). Telegram was strictly read-only at
+that release; 1.13.6 adds approval-gated machine tools.
 
 **Versioning for rollback.** The framework version lives in `pyproject.toml` /
 `__init__.py` and every release is a git tag (`v1.0.0`, `v1.1.0`, `v1.2.0`), so the codebase

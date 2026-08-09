@@ -105,7 +105,7 @@ def _parse_inline_tool_calls(
     """Recover XML-like tool calls emitted as text by some cloud chat templates.
 
     Only tools in the interface's already-filtered schema are converted. This makes the
-    compatibility path obey exactly the same remote/read-only boundary as native tool
+    compatibility path obeys exactly the same remote approval boundary as native tool
     calls instead of becoming a second, less restricted dispatcher.
     """
     saw_markup = bool(_INLINE_MARKER_RE.search(content))

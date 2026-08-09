@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 try:
     from prompt_toolkit.document import Document
-    from kilobyte.tui_full import KiloApp, _ChatLexer
+    from kilobyte.tui_full import KiloApp, STYLE as TUI_STYLE, _ChatLexer
 except ModuleNotFoundError as exc:
     if exc.name != "prompt_toolkit":
         raise
@@ -28,6 +28,10 @@ class FullTUIDirectChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("class:pygments.keyword", styles)
         self.assertIn("class:pygments.name.function", styles)
         self.assertTrue(any(style.startswith("class:pygments.literal.string") for style in styles))
+        keyword = TUI_STYLE.get_attrs_for_style_str("class:pygments.keyword")
+        function = TUI_STYLE.get_attrs_for_style_str("class:pygments.name.function")
+        self.assertNotEqual(keyword.color, function.color)
+        self.assertTrue(keyword.bold)
         self.assertEqual("".join(value for _style, value in fragments), document.lines[1])
 
     async def test_old_live_work_and_response_share_the_same_kilo_box(self):

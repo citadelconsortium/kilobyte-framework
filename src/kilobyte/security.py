@@ -50,22 +50,6 @@ class PathPolicy:
 class CommandPolicy:
     """Shell-free command gate with explicit high-risk classification."""
 
-    NEVER_REMOTE = {
-        "sudo",
-        "su",
-        "doas",
-        "mount",
-        "umount",
-        "fdisk",
-        "parted",
-        "mkfs",
-        "shutdown",
-        "reboot",
-        "poweroff",
-        "systemctl",
-        "iptables",
-        "nft",
-    }
     DESTRUCTIVE = {
         "rm",
         "rmdir",
@@ -246,8 +230,6 @@ class CommandPolicy:
                 "shell operators are not accepted; execute one program at a time"
             )
         executable = Path(argv[0]).name
-        if remote and executable in self.NEVER_REMOTE:
-            raise PermissionDenied(f"{executable} is blocked over Telegram")
         if executable == "find" and any(
             arg in {"-delete", "-exec", "-execdir", "-ok", "-okdir"} for arg in argv[1:]
         ):
@@ -334,7 +316,9 @@ class PermissionManager:
         if risk is Risk.SAFE:
             return
         if remote:
-            raise PermissionDenied(f"remote policy denied {capability}: {detail}")
+            if callback is None or not await callback(capability, detail, risk):
+                raise PermissionDenied(f"Telegram approval not granted for {capability}")
+            return
         rule = self.rules.get(capability)
         if rule == "allow":
             return

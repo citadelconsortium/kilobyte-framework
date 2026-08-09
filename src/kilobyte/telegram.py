@@ -4,6 +4,7 @@ import asyncio
 import html
 import json
 import logging
+import secrets
 import time
 import urllib.parse
 import urllib.request
@@ -13,6 +14,7 @@ from typing import Any
 from .activity import format_arguments, format_summary
 from .agent import Agent
 from .profiles import PROFILES
+from .security import Risk
 from .telegram_render import telegram_html, telegram_html_chunks
 
 log = logging.getLogger("kilobyte.telegram")
@@ -39,6 +41,7 @@ class TelegramBridge:
         self._fresh: set[int] = set()
         self._chat_providers: dict[int, str] = {}
         self._chat_profiles: dict[int, str] = {}
+        self._approval_waiters: dict[tuple[int, str], asyncio.Future[bool]] = {}
 
     def config(self) -> dict[str, Any] | None:
         try:
@@ -163,6 +166,61 @@ class TelegramBridge:
             if keyboard and index == len(chunks) - 1:
                 data["reply_markup"] = keyboard
             await asyncio.to_thread(self._call, token, "sendMessage", data)
+
+    async def _request_approval(
+        self,
+        token: str,
+        chat_id: int,
+        capability: str,
+        detail: str,
+        risk: Risk,
+    ) -> bool:
+        """Ask the same allow-listed Telegram chat to approve one exact machine action."""
+        approval_id = secrets.token_urlsafe(9)
+        key = (chat_id, approval_id)
+        future = asyncio.get_running_loop().create_future()
+        self._approval_waiters[key] = future
+        keyboard = {
+            "inline_keyboard": [[
+                {
+                    "text": "✅ Approve once",
+                    "callback_data": f"approval:yes:{approval_id}",
+                },
+                {
+                    "text": "❌ Deny",
+                    "callback_data": f"approval:no:{approval_id}",
+                },
+            ]]
+        }
+        await self.send(
+            token,
+            chat_id,
+            "⚠️ <b>Machine approval required</b>\n"
+            f"<b>Risk:</b> <code>{html.escape(risk.value)}</code>\n"
+            f"<b>Action:</b> <code>{html.escape(capability)}</code>\n"
+            f"<pre>{html.escape(detail)}</pre>\n"
+            "Approve this action once?",
+            keyboard,
+        )
+        try:
+            return await asyncio.wait_for(future, timeout=280)
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            self._approval_waiters.pop(key, None)
+
+    def _resolve_approval(self, chat_id: int, data: str) -> bool:
+        """Resolve an approval button only for the chat that received the prompt."""
+        if not data.startswith("approval:"):
+            return False
+        try:
+            _prefix, decision, approval_id = data.split(":", 2)
+        except ValueError:
+            return True
+        future = self._approval_waiters.get((chat_id, approval_id))
+        if future is not None and not future.done():
+            future.set_result(decision == "yes")
+        return True
 
     async def _send_progress(self, token: str, chat_id: int, text: str) -> int | None:
         # Progress is bounded best-effort: show the thinking indicator when Telegram
@@ -370,6 +428,22 @@ class TelegramBridge:
         fresh = chat_id in self._fresh
         tool_started: dict[str, float] = {}
         try:
+            async def request_approval(
+                capability: str, detail: str, risk: Risk
+            ) -> bool:
+                state["phase"], state["phase_kind"] = (
+                    "waiting for Sir's approval",
+                    "thinking",
+                )
+                state["work"].append(f"⚠ approval  {risk.value}  {capability}")
+                allowed = await self._request_approval(
+                    token, chat_id, capability, detail, risk
+                )
+                state["work"].append(
+                    f"{'✓ approved' if allowed else '✗ denied'}  {capability}"
+                )
+                return allowed
+
             async for event in self.agent.run(
                 str(text),
                 session_id,
@@ -377,6 +451,7 @@ class TelegramBridge:
                 provider=provider,
                 agent_profile=profile,
                 fresh=fresh,
+                permission_callback=request_approval,
             ):
                 self._fresh.discard(chat_id)
                 kind = event.get("type")
@@ -499,7 +574,7 @@ class TelegramBridge:
             lines = [
                 "🤖 <b>Kilo</b> — ready, Sir.",
                 "Private local inference is the default. Cloud is used only after /cloud.",
-                "🔒 <i>Telegram tools stay read-only.</i>  ·  /help for commands",
+                "🛠 <i>Machine tools enabled; changes ask for approval.</i>  ·  /help",
             ]
             await self.send(token, chat_id, "\n".join(lines), self.MENU)
             return True
@@ -511,9 +586,9 @@ class TelegramBridge:
                     for name, description in self.COMMANDS
                 ],
                 "",
-                "🔒 <b>Telegram remains read-only</b>: no terminal commands, file writes,",
-                "service control, or destructive tools. /cloud explicitly routes prompts to",
-                "the selected configured provider; /local keeps everything on Kilobase.",
+                "🛠 <b>Machine tools are enabled</b>: safe inspection runs directly; commands,",
+                "writes, services, packages, and destructive actions show Approve/Deny buttons.",
+                "/cloud changes the model route; /local keeps inference on Kilobase.",
             ]
             await self.send(token, chat_id, "\n".join(lines), self.MENU)
             return True
@@ -778,7 +853,7 @@ class TelegramBridge:
             (
                 "setMyDescription",
                 {
-                    "description": "Kilo is Sir's Kilobase assistant: local by default, cloud only when selected, with persistent memory and read-only Telegram tools."
+                    "description": "Kilo is Sir's Kilobase assistant: local by default, cloud only when selected, with persistent memory and approval-gated machine tools."
                 },
             ),
         )
@@ -840,6 +915,7 @@ class TelegramBridge:
                                     chat_id,
                                 )
                                 continue
+                            callback_data = str(query.get("data", ""))
                             # Acknowledge promptly or the client shows a spinner on the button.
                             try:
                                 await asyncio.to_thread(
@@ -850,9 +926,8 @@ class TelegramBridge:
                                 )
                             except Exception:
                                 pass
-                            await self._command(
-                                token, chat_id, str(query.get("data", ""))
-                            )
+                            if not self._resolve_approval(chat_id, callback_data):
+                                await self._command(token, chat_id, callback_data)
                             continue
 
                         message = update.get("message") or {}

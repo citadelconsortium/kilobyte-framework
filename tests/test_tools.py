@@ -31,12 +31,35 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
         command = await self.tools.execute("run_command", {"command": "/usr/bin/printf okay"}, self.context)
         self.assertEqual(command["stdout"], "okay")
 
-    async def test_remote_mutation_is_absent_and_blocked(self):
+    async def test_remote_commands_and_writes_use_the_approval_callback(self):
         names = {item["function"]["name"] for item in self.tools.schemas(remote=True)}
-        self.assertNotIn("write_file", names)
-        self.assertNotIn("run_command", names)
+        self.assertIn("write_file", names)
+        self.assertIn("run_command", names)
+        approvals = []
+
+        async def approve(capability, detail, risk):
+            approvals.append((capability, detail, risk.value))
+            return True
+
+        context = ToolContext(
+            self.session, Path(self.tmp.name), remote=True, permission_callback=approve
+        )
+        command = await self.tools.execute(
+            "run_command", {"command": "/usr/bin/printf remote-ok"}, context
+        )
+        self.assertEqual(command["stdout"], "remote-ok")
+        target = Path(self.tmp.name) / "telegram.txt"
+        await self.tools.execute(
+            "write_file", {"path": str(target), "content": "approved"}, context
+        )
+        self.assertEqual(target.read_text(), "approved")
+        self.assertTrue(any(item[0] == "filesystem.write" for item in approvals))
         with self.assertRaises(SecurityError):
-            await self.tools.execute("run_command", {"command": "true"}, ToolContext(self.session, Path(self.tmp.name), remote=True))
+            await self.tools.execute(
+                "write_file",
+                {"path": str(target), "content": "denied"},
+                ToolContext(self.session, Path(self.tmp.name), remote=True),
+            )
 
     async def test_tool_schemas_are_stable_across_requests(self):
         """Tools render into the cacheable prompt prefix, so the set must not vary with
@@ -45,15 +68,21 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(baseline)
         for request in ("Reply with exactly: ready", "Inspect this machine CPU", "Search the web for Arch Linux"):
             self.assertEqual(self.tools.schemas(request=request), baseline)
-        # Remote still drops mutating tools, and does so consistently.
+        # Allow-listed Telegram receives the same built-ins; mutation is approval-gated.
         remote = self.tools.schemas(remote=True)
         self.assertEqual(self.tools.schemas(remote=True, request="Search the web for Arch Linux"), remote)
-        self.assertLess(len(remote), len(baseline))
+        self.assertEqual(remote, baseline)
 
     async def test_memory_tools(self):
         await self.tools.execute("remember", {"content": "favorite shell is bash"}, self.context)
         result = await self.tools.execute("recall", {"query": "favorite shell"}, self.context)
         self.assertTrue(result["facts"])
+
+    async def test_missing_tool_arguments_return_actionable_schema_error(self):
+        with self.assertRaisesRegex(
+            ToolError, r"write_file missing required argument.*path, content"
+        ):
+            await self.tools.execute("write_file", {}, self.context)
 
     async def test_web_search_parses_bounded_rss(self):
         rss = """<?xml version="1.0"?><rss><channel><item><title>Arch Linux</title><link>https://archlinux.org/</link><description>Simple &amp; lightweight.</description></item></channel></rss>"""

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import tempfile
@@ -7,6 +8,7 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
+from kilobyte.security import Risk
 from kilobyte.telegram import TelegramBridge
 
 
@@ -143,13 +145,34 @@ class TelegramCommandTests(IsolatedAsyncioTestCase):
         bridge.send = capture  # type: ignore[method-assign]
         return bridge
 
-    async def test_start_and_help_explain_the_read_only_policy(self):
+    async def test_start_and_help_explain_approval_gated_machine_tools(self):
         with tempfile.TemporaryDirectory() as raw:
             bridge = self._bridge(raw)
             for command in ("/start", "/help", "help"):
                 self.sent.clear()
                 self.assertTrue(await bridge._command("secret", 42, command))
-                self.assertIn("read-only", self.sent[0])
+                self.assertIn("approv", self.sent[0].lower())
+
+    async def test_approval_button_is_bound_to_the_requesting_chat(self):
+        with tempfile.TemporaryDirectory() as raw:
+            bridge = self._bridge(raw)
+            delivered = []
+
+            async def capture(token, chat_id, text, keyboard=None):
+                delivered.append((text, keyboard))
+
+            bridge.send = capture  # type: ignore[method-assign]
+            task = asyncio.create_task(
+                bridge._request_approval(
+                    "secret", 42, "terminal.execute.write", "git push", Risk.WRITE
+                )
+            )
+            await asyncio.sleep(0)
+            callback = delivered[0][1]["inline_keyboard"][0][0]["callback_data"]
+            self.assertTrue(bridge._resolve_approval(99, callback))
+            self.assertFalse(task.done())
+            self.assertTrue(bridge._resolve_approval(42, callback))
+            self.assertTrue(await task)
 
     async def test_group_style_command_suffix_is_accepted(self):
         """In groups Telegram delivers '/status@BotName'."""
@@ -218,6 +241,7 @@ class TelegramCommandTests(IsolatedAsyncioTestCase):
             self.assertEqual(captured["provider"], "cloud")
             self.assertEqual(captured["agent_profile"], "security")
             self.assertTrue(captured["fresh"])
+            self.assertTrue(callable(captured["permission_callback"]))
 
 
 class TelegramConcurrencyTests(IsolatedAsyncioTestCase):
@@ -293,7 +317,7 @@ class TelegramConcurrencyTests(IsolatedAsyncioTestCase):
             await asyncio.wait_for(started.wait(), timeout=5)
             # The slow reply is in flight; a command must still be answered promptly.
             await asyncio.wait_for(bridge._command("secret", 42, "/help"), timeout=5)
-            self.assertTrue(any("read-only" in message for message in sent))
+            self.assertTrue(any("approv" in message.lower() for message in sent))
             bridge.stop()
 
 

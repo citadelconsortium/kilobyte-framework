@@ -47,7 +47,8 @@ The one-line installer bootstraps this repository, installs the app/service, and
 does not download a brain. Use `/cloud` for a configured provider or `/gguf` for
 an operator-supplied local model. `/botkey` configures Telegram through the daemon
 RPC. Telegram publishes real command autocomplete and provides `/local`, `/cloud`,
-`/switch`, `/model`, and `/agent` routing per chat; its tool boundary remains read-only.
+`/switch`, `/model`, and `/agent` routing per chat. Allow-listed chats receive every built-in
+tool; non-safe actions require one-time Approve/Deny callbacks bound to that chat.
 Progress animates every 1.2 seconds and a second persistent card shows the bounded,
 redacted work log and live reply preview. `agent.py` recovers XML-like tool calls emitted
 inside a provider's text stream, but only for names in the already-filtered interface
@@ -76,7 +77,7 @@ Past-chat selectors include local date/time. OpenRouter free-model discovery acc
 
 ## Verification and limits
 
-The full suite is 144 tests and passes. The Framework installer is intentionally
+The full suite is 146 tests and passes. The Framework installer is intentionally
 usable without `llama-server` for cloud-only operation. Local GGUF performance is
 bounded by the target machine; advanced coding/security work should use capable
 hardware or an explicitly selected cloud model. Keep the security profile and
