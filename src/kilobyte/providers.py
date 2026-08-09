@@ -45,6 +45,24 @@ class ProviderError(KilobyteError):
     """A cloud provider could not answer. Never triggers a silent local retry."""
 
 
+def _model_ids(data: dict[str, Any]) -> list[str]:
+    """Normalise common provider model-catalogue response shapes."""
+    entries = data.get("data") or data.get("models") or data.get("result") or []
+    if isinstance(entries, dict):
+        entries = entries.get("models") or entries.get("data") or []
+    found: list[str] = []
+    for item in entries if isinstance(entries, list) else []:
+        if isinstance(item, str):
+            value = item
+        elif isinstance(item, dict):
+            value = item.get("id") or item.get("name") or item.get("model")
+        else:
+            value = None
+        if value and str(value) not in found:
+            found.append(str(value))
+    return found
+
+
 @dataclass(frozen=True, slots=True)
 class Provider:
     name: str
@@ -174,10 +192,18 @@ class ProviderRegistry:
             url,
             headers={"Authorization": f"Bearer {prov.api_key}", "Accept": "application/json", **_ATTRIBUTION},
         )
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.load(r)
-        entries = data.get("data") or data.get("result") or []
-        ids = [m.get("id") for m in entries if isinstance(m, dict) and m.get("id")]
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.load(r)
+            ids = _model_ids(data)
+        except Exception as exc:
+            # Several otherwise compatible services do not publish a catalogue route.
+            # Keep /model useful and honest: expose the known configured model rather than
+            # presenting an empty picker, while logging the catalogue failure for diagnosis.
+            log.warning("%s model catalogue unavailable (%s); using configured default", prov.name, exc)
+            ids = [prov.model]
+        if prov.model not in ids:
+            ids.insert(0, prov.model)
         if only_free and "openrouter" in prov.base_url:
             free = sorted(i for i in ids if str(i).endswith(":free"))
             if free:
