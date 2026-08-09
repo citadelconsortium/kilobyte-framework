@@ -50,7 +50,6 @@ from prompt_toolkit.lexers import Lexer
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea
 
-from .activity import format_arguments, format_summary
 from .rpc import RPCClient
 
 KILO_ART = (
@@ -223,11 +222,6 @@ class KiloApp:
         self._line_buf = ""   # accumulates a streamed line until it can be boxed
         self.usage: dict[str, Any] = {}   # token usage from the last reply
         self._answered = False            # whether the current reply has started printing
-        self._work_split = False           # work/reply divider already rendered this turn
-        self._had_work = False             # live work preceded the final response
-        self._answer_checkpoint: int | None = None
-        self._answer_has_text = False
-        self._answer_blank = False
         self._pending: dict[str, Any] | None = None   # awaited inline input (selector / key)
         self._catalog: dict[str, Any] = {}
         self._cloud_options: list[tuple[str, dict[str, Any]]] = []
@@ -278,9 +272,9 @@ class KiloApp:
             nl = self._line_buf.find("\n")
             if nl >= 0:
                 line, self._line_buf = self._line_buf[:nl], self._line_buf[nl + 1:]
-                self._answer_line(self._clean_md(line))
+                self._bline(self._clean_md(line))
             elif len(self._line_buf) >= inner:
-                self._answer_line(self._line_buf[:inner])
+                self._bline(self._line_buf[:inner])
                 self._line_buf = self._line_buf[inner:]
             else:
                 break
@@ -296,20 +290,8 @@ class KiloApp:
 
     def _flush_boxed(self) -> None:
         if self._line_buf:
-            self._answer_line(self._clean_md(self._line_buf))
+            self._bline(self._clean_md(self._line_buf))
             self._line_buf = ""
-
-    def _answer_line(self, text: str) -> None:
-        """Render reply text without provider-generated vertical whitespace."""
-        if not text.strip():
-            if not self._answer_has_text or self._answer_blank:
-                return
-            self._bline("")
-            self._answer_blank = True
-            return
-        self._bline(text)
-        self._answer_has_text = True
-        self._answer_blank = False
 
     def _input_prompt(self):
         if self.busy:
@@ -359,7 +341,6 @@ class KiloApp:
     def _banner_text(self):
         online = bool(self.status.get("healthy"))
         prof = self.status.get("profile") or {}
-        active_context = self._active_context_label()
         # A breathing dot animates even when idle, so the header never looks frozen.
         pulse = PULSE[self.spin % len(PULSE)]
         dot = f"{pulse} online" if online else "○ offline"
@@ -367,7 +348,7 @@ class KiloApp:
             [("class:banner.hi", "KILOBYTE  "), ("class:on" if online else "class:off", dot)],
             [("class:tagline", "local-first · one model · no cloud by default")],
             [("class:on", f"brain   {self.model_name}")],
-            [("class:dim", f"context {active_context}   " + ("hosted cloud" if self.cloud_active else f"threads {prof.get('threads','?')}   gpu {prof.get('gpu_layers','?')}"))],
+            [("class:dim", f"context {prof.get('context_size','?')}   threads {prof.get('threads','?')}   gpu {prof.get('gpu_layers','?')}")],
             [("class:dim", "tools   files · shell · web · memory · skills")],
             [("class:tagline", "made by 0v3r51ght  ·  /help · F2 runtime · Ctrl-Q quit")],
         ]
@@ -389,7 +370,7 @@ class KiloApp:
     def _stats_bar(self):
         elapsed = (time.monotonic() - self.started) if (self.busy and self.started) else 0
         if self.busy:
-            phase = self.phase or ACTIVITY[(self.spin // 7) % len(ACTIVITY)]
+            phase = self.phase or ACTIVITY[(self.spin // 10) % len(ACTIVITY)]
             if self.streaming:
                 # A blinking caret shows tokens are actively arriving.
                 caret = "▌" if (self.spin // 3) % 2 else " "
@@ -436,13 +417,12 @@ class KiloApp:
     def _panel_text(self):
         prof = self.status.get("profile") or {}
         mem = self.status.get("memory") or {}
-        active_context = self._active_context_label()
         return [
             ("class:panel.title", " RUNTIME\n\n"),
             ("class:panel.key", " model    "), ("", f"{self.model_name}\n"),
             ("class:panel.key", " healthy  "), ("", f"{self.status.get('healthy')}\n"),
             ("class:panel.key", " uptime   "), ("", f"{self.status.get('uptime_seconds',0)}s\n"),
-            ("class:panel.key", " context  "), ("", f"{active_context}\n"),
+            ("class:panel.key", " context  "), ("", f"{prof.get('context_size','?')}\n"),
             ("class:panel.key", " threads  "), ("", f"{prof.get('threads','?')}\n"),
             ("class:panel.key", " gpu      "), ("", f"{prof.get('gpu_layers','?')} layers\n"),
             ("class:panel.key", " memory   "), ("", f"{prof.get('available_mb','?')} MiB\n\n"),
@@ -450,7 +430,7 @@ class KiloApp:
             ("class:panel.key", " reply tok"), ("", f" {self.tokens}\n"),
             ("class:panel.key", " prompt   "), ("", f"{(self.usage or {}).get('prompt_tokens','-')}\n"),
             ("class:panel.key", " total    "), ("", f"{(self.usage or {}).get('total_tokens','-')}\n"),
-            ("class:panel.key", " ctx limit"), ("", f" {active_context}\n"),
+            ("class:panel.key", " ctx limit"), ("", f" {prof.get('context_size','?')}\n"),
             ("class:panel.key", " tools    "), ("", f"{self.tools_used}\n\n"),
             ("class:panel.title", " MEMORY\n\n"),
             ("class:panel.key", " sessions "), ("", f"{mem.get('sessions','?')}\n"),
@@ -875,15 +855,10 @@ class KiloApp:
         or the cloud provider's current model."""
         try:
             if self.cloud_active and self.cloud_provider:
-                info = await self.client.request("provider_info", name=self.cloud_provider)
-                if not info.get("context_limit"):
-                    await self.client.request(
-                        "provider_models", name=self.cloud_provider, only_free=False
-                    )
-                    info = await self.client.request("provider_info", name=self.cloud_provider)
+                info = await self.client.request("provider_info")
                 model = info.get("model")
                 self.status["cloud_context_limit"] = info.get("context_limit")
-                self.model_name = f"{self.cloud_provider}:{model}" if model else f"cloud·{self.cloud_provider}"
+                self.model_name = f"{info.get('default')}:{model}" if model else f"cloud·{self.cloud_provider}"
             else:
                 st = await self.client.request("status")
                 self.model_name = Path(str(st.get("model", ""))).stem or self.model_name
@@ -897,7 +872,7 @@ class KiloApp:
 
     async def _model_picker(self) -> None:
         try:
-            info = await self.client.request("provider_info", name=self.cloud_provider or None)
+            info = await self.client.request("provider_info")
         except (ConnectionError, FileNotFoundError, OSError) as exc:
             self._append(f"\n⚠ {exc}\n")
             return
@@ -906,9 +881,7 @@ class KiloApp:
             return
         self._append("\n☁ fetching available models…\n")
         try:
-            res = await self.client.request(
-                "provider_models", name=info.get("default"), only_free=True
-            )
+            res = await self.client.request("provider_models")
         except (ConnectionError, FileNotFoundError, OSError) as exc:
             self._append(f"\n⚠ {exc}\n")
             return
@@ -971,7 +944,7 @@ class KiloApp:
 
     async def _model_cmd(self, arg: str) -> None:
         try:
-            info = await self.client.request("provider_info", name=self.cloud_provider or None)
+            info = await self.client.request("provider_info")
         except (ConnectionError, FileNotFoundError, OSError) as exc:
             self._append(f"\n⚠ {exc}\n")
             return
@@ -1004,15 +977,11 @@ class KiloApp:
         self._answered = False
         self._work_split = False
         self._had_work = False
-        self._answer_checkpoint = None
-        self._answer_has_text = False
-        self._answer_blank = False
         self.usage = {}
         self.streaming = False
         self.agent_name = ""
         self.phase = "thinking"
         self.started = time.monotonic()
-        tool_started: dict[str, float] = {}
         reader = writer = None
         try:
             reader, writer = await asyncio.open_unix_connection(self.client.socket_path)
@@ -1032,54 +1001,58 @@ class KiloApp:
                     self.session_id = event["session_id"]
                 elif kind == "brain":
                     self.model_name = event.get("label", self.model_name)
-                    location = event.get("location", "local")
-                    if location == "cloud":
-                        self._work_line(f"☁ escalated to {event.get('label')}")
+                    if event.get("location") == "cloud":
+                        self._open_box()
+                        self._bline(f"\u2601 escalated to {event.get('label')}")
+                        self._had_work = True
                 elif kind == "agent":
                     self.agent_name = event.get("profile", "")
-                    self._work_line(f"◇ {event.get('profile','')} agent active")
-                elif kind == "capabilities":
-                    names = [str(name) for name in event.get("tools") or []]
-                    self._work_line(
-                        f"◇ tools active ({len(names)})  " + " · ".join(names)
-                    )
+                    self._open_box()
+                    self._bline(f"\u25c7 orchestrator \u2192 {event.get('profile','')} agent")
+                    self._had_work = True
                 elif kind == "warming":
                     self.phase = "warming cache (one-off)"
-                    self._work_line("◌ cache  warming prompt prefix (one-off after a change)")
+                    self._open_box()
+                    self._bline("\u23f3 warming the prompt cache (one-off after a change)")
+                    self._had_work = True
                 elif kind == "thinking":
                     self.phase = "thinking"
                     self.streaming = False
                 elif kind == "token":
-                    self._open_answer_box()
+                    self._open_box()
+                    if self._had_work and not self._work_split:
+                        # a faint divider separates the work section from the reply
+                        self._flush_boxed()
+                        self._bline("\u2508" * max(4, self._cw() - 4))
+                        self._work_split = True
                     self.streaming = True
                     self.tokens += 1
                     self._stream_boxed(event.get("text", ""))
-                elif kind == "response_reset":
-                    self._reset_answer()
-                    self._work_line("↻ intercepted model tool markup; dispatching safely")
                 elif kind == "tool_start":
                     self.tools_used += 1
                     self.phase = f"running {event['name']}"
                     self.streaming = False
-                    tool_started[event["name"]] = time.monotonic()
-                    detail = format_arguments(event.get("arguments") or {}, 900)
-                    self._work_line(f"▶ {event['name']}{'  ' + detail if detail else ''}")
+                    args = event.get("arguments") or {}
+                    detail = ", ".join(f"{k}={str(v)[:32]}" for k, v in list(args.items())[:2])
+                    self._open_box()
+                    self._flush_boxed()
+                    self._bline(f"\u25c8 {event['name']} {detail}")
+                    self._had_work = True
                 elif kind == "tool_end":
                     ok = "✓" if event.get("ok") else "!"
-                    name = event.get("name", "tool")
-                    elapsed = time.monotonic() - tool_started.pop(name, time.monotonic())
-                    summary = format_summary(event.get("summary", ""), 900)
-                    self._work_line(f"{ok} {name}  {elapsed:0.1f}s{'  ' + summary if summary else ''}")
+                    self._open_box()
+                    self._bline(f"{ok} {event.get('name')} \u00b7 {str(event.get('summary',''))[:90]}")
                     self.phase = "interpreting"
                 elif kind == "error":
-                    self._work_line(f"✗ error  {format_summary(event.get('error'), 900)}")
+                    self._append(f"\n⚠ {event.get('error')}\n")
                 elif kind == "permission":
                     allow, remember = await self._ask_permission(event)
                     writer.write((json.dumps({"type": "permission_response", "id": event.get("id"), "allow": allow, "remember": remember}) + "\n").encode())
                     await writer.drain()
                 elif kind == "done":
-                    self._close_answer_box()
-                    self._close_box()
+                    if self._answered:
+                        self._flush_boxed()
+                        self._append(self._rule() + "\n")
                     self.usage = event.get("usage") or {}
                     break
                 self.app.invalidate()
@@ -1092,62 +1065,19 @@ class KiloApp:
                 writer.close()
             self.busy = self.streaming = False
             self.phase = ""
+            self._append("\n")
             self.app.invalidate()
 
     def _open_box(self) -> None:
-        """Open Kilo's one response box for agent, tools, live work, and final text."""
+        """Open Kilo's response box exactly once, so every part of his turn — escalation
+        notices, agent hand-offs, tool work, and the reply — renders INSIDE his border,
+        never floating under the owner's input box."""
         if self._answered:
             return
         self._append("\n" + self._rule("Kilo") + "\n")
         self._answered = True
-        self._line_buf = ""
-
-    def _close_box(self) -> None:
-        if not self._answered:
-            return
-        self._append(self._rule() + "\n")
-        self._answered = False
-
-    def _work_line(self, text: str) -> None:
-        self._open_box()
-        self._flush_boxed()
-        inner = max(1, self._cw() - 3)
-        for raw_line in str(text).splitlines() or [""]:
-            line = raw_line
-            while len(line) > inner:
-                self._bline(line[:inner])
-                line = line[inner:]
-            self._bline(line)
-        self._had_work = True
         self._work_split = False
-        self._answer_checkpoint = None
-
-    def _open_answer_box(self) -> None:
-        """Start response text inside the same box as Kilo's live work."""
-        self._open_box()
-        if self._answer_checkpoint is None:
-            self._answer_checkpoint = len(self.output.buffer.text)
-            self._answer_has_text = False
-            self._answer_blank = False
-        if self._had_work and not self._work_split:
-            self._bline("┈" * max(4, self._cw() - 4))
-            self._work_split = True
-
-    def _close_answer_box(self) -> None:
-        if not self._answered:
-            return
-        self._flush_boxed()
-
-    def _reset_answer(self) -> None:
-        """Really retract a streamed preamble while retaining earlier work rows."""
-        if self._answer_checkpoint is not None:
-            text = self.output.buffer.text[: self._answer_checkpoint]
-            self.output.buffer.set_document(Document(text, len(text)), bypass_readonly=True)
         self._line_buf = ""
-        self._answer_checkpoint = None
-        self._answer_has_text = False
-        self._answer_blank = False
-        self._work_split = False
 
     def _short_model(self) -> str:
         """A compact brain label for the status bar so long cloud ids never crowd it."""
@@ -1158,14 +1088,6 @@ class KiloApp:
         elif ":" in name and not name.startswith("cloud"):
             name = name.split(":", 1)[-1]
         return (name[:20] + "\u2026") if len(name) > 21 else name
-
-    def _active_context_label(self) -> str:
-        """Report the active route, never the local 8192 value for a cloud brain."""
-        if self.cloud_active:
-            limit = self.status.get("cloud_context_limit")
-            return f"{limit} tokens" if limit else "provider-managed"
-        local = (self.status.get("profile") or {}).get("context_size")
-        return f"{local} tokens" if local else "unknown"
 
     async def _ask_permission(self, event: dict) -> tuple[bool, bool]:
         """Ask the owner to approve a risky action. Type 1 (yes), 2 (yes, all this
@@ -1231,7 +1153,7 @@ class KiloApp:
             # Always invalidate so the header dot and idle wave keep moving; the rate is
             # modest, so this is cheap even while nothing is happening.
             self.app.invalidate()
-            await asyncio.sleep(0.07)
+            await asyncio.sleep(0.12)
 
     async def run(self) -> None:
         try:
