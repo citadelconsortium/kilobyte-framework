@@ -393,8 +393,14 @@ class KiloApp:
         ctx = (self.status.get("profile") or {}).get("context_size")
         if ctx:
             used = (self.usage or {}).get("total_tokens")
-            bar += [("class:stat.k", "   ▤ ctx "),
-                    ("class:stat", f"{used}/{ctx}" if used else f"{ctx}")]
+            if self.cloud_active:
+                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", "cloud")]
+            else:
+                used = int(used or 0)
+                ratio = min(1.0, used / max(1, int(ctx)))
+                filled = round(ratio * 8)
+                meter = "".join("█" if i < filled else "░" for i in range(8))
+                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", f"{meter} {used}/{ctx}")]
         return bar
 
     def _panel_text(self):
