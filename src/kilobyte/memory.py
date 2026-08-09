@@ -231,8 +231,9 @@ class MemoryStore:
 
     def stats(self) -> dict[str, int]:
         with self._lock:
-            return {
+            stats = {
                 name: int(self._db.execute(f"SELECT count(*) FROM {name}").fetchone()[0])
                 for name in ("sessions", "messages", "facts", "tool_audit", "skills")
             }
-
+            stats["requests"] = int(self._db.execute("SELECT count(*) FROM messages WHERE role='user'").fetchone()[0])
+            return stats
