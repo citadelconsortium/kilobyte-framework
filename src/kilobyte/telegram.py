@@ -22,7 +22,7 @@ class TelegramBridge:
     CONFIG_POLL_SECONDS = 30
     # How often the progress message is rewritten. Frequent enough that the sender can
     # see it is alive, slow enough to stay clear of Telegram's edit rate limits.
-    PROGRESS_SECONDS = 8
+    PROGRESS_SECONDS = 3
 
     def __init__(self, config_path: Path, agent: Agent):
         self.config_path = config_path
@@ -94,7 +94,7 @@ class TelegramBridge:
                 payload[key] = json.dumps(value)
         encoded = urllib.parse.urlencode(payload).encode()
         request = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}", data=encoded)
-        with urllib.request.urlopen(request, timeout=1) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             return json.load(response)
 
     async def send(self, token: str, chat_id: int, text: str, keyboard: dict[str, Any] | None = None) -> None:
@@ -107,9 +107,18 @@ class TelegramBridge:
             await asyncio.to_thread(self._call, token, "sendMessage", data)
 
     async def _send_progress(self, token: str, chat_id: int, text: str) -> int | None:
-        # Progress is best-effort. Never hold the agent behind a Telegram/DNS outage;
-        # the final reply remains authoritative and is sent through ``send``.
-        return None
+        # Progress is bounded best-effort: show the thinking indicator when Telegram
+        # responds, but never hold the agent behind a network/DNS outage.
+        if ":" not in token:  # malformed/test token; avoid pointless network work
+            return None
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(self._call, token, "sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}),
+                timeout=3,
+            )
+            return int(response["result"]["message_id"])
+        except Exception:
+            return None
 
     async def _edit_progress(self, token: str, chat_id: int, message_id: int | None, text: str) -> None:
         """Rewrite the live status line. Telegram rejects an edit that would not change
@@ -195,6 +204,9 @@ class TelegramBridge:
                 f"⏱ <i>{clock}</i>",
                 *([f"🔧 <i>{html.escape(' → '.join(tools))}</i>"] if tools else []),
             ])
+            preview = "".join(state.get("output", []))[-1200:]
+            if preview:
+                body += f"\n\n<b>live reply</b>\n<code>{html.escape(preview)}</code>"
             await self._edit_progress(token, chat_id, message_id, body)
 
     async def _reply(self, token: str, chat_id: int, text: str) -> None:
@@ -202,7 +214,7 @@ class TelegramBridge:
         # A reply can take minutes here; a status message that is edited as work
         # progresses is the only way the sender can tell it is alive.
         progress = await self._send_progress(token, chat_id, "◐ <b>Kilo is working</b>\n\n💭 thinking")
-        state: dict[str, Any] = {"phase": "thinking", "phase_kind": "thinking", "started": time.monotonic(), "tools": []}
+        state: dict[str, Any] = {"phase": "thinking", "phase_kind": "thinking", "started": time.monotonic(), "tools": [], "output": []}
         ticker = asyncio.create_task(self._tick_progress(token, chat_id, progress, state))
         output: list[str] = []
         agent_label: str | None = None
@@ -210,7 +222,9 @@ class TelegramBridge:
             async for event in self.agent.run(str(text), f"telegram-{chat_id}", remote=True):
                 kind = event.get("type")
                 if kind == "token":
-                    output.append(event.get("text", ""))
+                    token_text = event.get("text", "")
+                    output.append(token_text)
+                    state["output"].append(token_text)
                 elif kind == "agent":
                     agent_label = str(event.get("profile") or "")
                 elif kind == "warming":
