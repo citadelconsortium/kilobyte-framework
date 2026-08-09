@@ -393,8 +393,15 @@ class KiloApp:
         ctx = (self.status.get("profile") or {}).get("context_size")
         if ctx:
             used = (self.usage or {}).get("total_tokens")
-            if self.cloud_active:
-                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", "cloud")]
+            cloud_ctx = self.status.get("cloud_context_limit")
+            if self.cloud_active and cloud_ctx:
+                used = int((self.usage or {}).get("total_tokens") or 0)
+                ratio = min(1.0, used / max(1, int(cloud_ctx)))
+                filled = round(ratio * 8)
+                meter = "".join("█" if i < filled else "░" for i in range(8))
+                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", f"{meter} {used}/{cloud_ctx}")]
+            elif self.cloud_active:
+                bar += [("class:stat.k", "   ▤ ctx "), ("class:stat", "cloud ?")]
             else:
                 used = int(used or 0)
                 ratio = min(1.0, used / max(1, int(ctx)))
@@ -844,6 +851,7 @@ class KiloApp:
             if self.cloud_active and self.cloud_provider:
                 info = await self.client.request("provider_info")
                 model = info.get("model")
+                self.status["cloud_context_limit"] = info.get("context_limit")
                 self.model_name = f"{info.get('default')}:{model}" if model else f"cloud·{self.cloud_provider}"
             else:
                 st = await self.client.request("status")
@@ -874,6 +882,7 @@ class KiloApp:
         if not res.get("ok"):
             self._append(f"\n⚠ {res.get('error', 'could not list models')} — use /model <name>\n")
             return
+        await self._refresh_brain_label()
         models = res.get("models", [])[:40]
         if not models:
             self._append("\n— no models returned; use /model <name> —\n")

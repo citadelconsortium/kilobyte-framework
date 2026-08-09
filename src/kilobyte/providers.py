@@ -110,6 +110,7 @@ class ProviderRegistry:
 
     def __init__(self, config_path):
         self.config_path = config_path
+        self._context_limits: dict[tuple[str, str], int] = {}
 
     def _raw(self) -> dict[str, Any]:
         try:
@@ -200,6 +201,15 @@ class ProviderRegistry:
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = json.load(r)
             ids = _model_ids(data)
+            for item in (data.get("data") or data.get("models") or data.get("result") or []):
+                if not isinstance(item, dict):
+                    continue
+                model_id = item.get("id") or item.get("name") or item.get("model")
+                limits = item.get("limits") if isinstance(item.get("limits"), dict) else {}
+                raw_limit = item.get("context_length") or item.get("context_window") or item.get("max_input_tokens") or limits.get("max_input_tokens")
+                if model_id and raw_limit:
+                    try: self._context_limits[(prov.name, str(model_id))] = int(raw_limit)
+                    except (TypeError, ValueError): pass
         except Exception as exc:
             # Several otherwise compatible services do not publish a catalogue route.
             # Keep /model useful and honest: expose the known configured model rather than
@@ -238,7 +248,20 @@ class ProviderRegistry:
         if name:
             raw = self._raw()
             model = str((raw.get("providers") or {}).get(name, {}).get("model", ""))
-        return {"default": name, "model": model, "configured": sorted(self.providers())}
+        return {"default": name, "model": model, "context_limit": self.context_limit(name, model), "configured": sorted(self.providers())}
+
+    def context_limit(self, name: str | None = None, model: str | None = None) -> int | None:
+        try:
+            prov = self.resolve(name)
+        except ProviderError:
+            return None
+        chosen = model or prov.model
+        value = self._context_limits.get((prov.name, chosen))
+        if value:
+            return value
+        raw = (self._raw().get("providers") or {}).get(prov.name, {}).get("context_limit")
+        try: return int(raw) if raw else None
+        except (TypeError, ValueError): return None
 
     def default_name(self) -> str | None:
         raw = self._raw()
