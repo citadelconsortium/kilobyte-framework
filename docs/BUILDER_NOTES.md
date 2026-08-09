@@ -39,6 +39,8 @@ compact; it shows phase, request count, tools, tokens, model, queue, and context
 Cloud context is shown only when the selected model API reports a verified limit.
 The TUI retains background RPC/monitor tasks and shows their live count in the stats bar;
 the daemon separately monitors and restarts a failed local runtime.
+Past-chat selectors include local date/time. OpenRouter free-model discovery accepts both
+`:free` IDs and zero-priced catalogue entries.
 
 ## Verification and limits
 
