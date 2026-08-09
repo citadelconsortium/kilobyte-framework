@@ -51,23 +51,16 @@ KILO_ART = (
     "╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ",
 )
 
-# Kilo's logo — a pixelated eyeball that blinks and watches. Sized to the banner height,
-# it animates off the shared spinner tick so the free space on the right stays alive.
-EYE_OPEN = (
-    "  ▄▄▄▄▄  ",
-    " ▟█████▙ ",
-    "▐██▓▓▓██▌",
-    "▐██▓P▓██▌",
-    " ▜█████▛ ",
-    "  ▀▀▀▀▀  ",
+# Kilo's README mascot, redrawn in terminal-safe pixels. It is a little green
+# machine rather than a generic eye: the shell breathes, pupils scan, and the
+# eyelids blink from the shared animation tick.
+MASCOT_OPEN = (
+    "  ▄█     █▄  ", " ▟██▓▓▓▓▓██▙ ", "▐██▓●▓●██▌",
+    "▐██▓ ▾ ▓██▌", "▐██▓▄▄▄▓██▌", " ▜███████▛ ",
 )
-EYE_SHUT = (
-    "         ",
-    "         ",
-    " ▁▁▁▁▁▁▁ ",
-    "▬▬▬▬▬▬▬▬▬",
-    " ▔▔▔▔▔▔▔ ",
-    "         ",
+MASCOT_BLINK = (
+    "  ▄█     █▄  ", " ▟██▓▓▓▓▓██▙ ", "▐██▓━▓━██▌",
+    "▐██▓ ▾ ▓██▌", "▐██▓▄▄▄▓██▌", " ▜███████▛ ",
 )
 
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"       # default "thinking" spinner
@@ -311,17 +304,17 @@ class KiloApp:
     def _mascot(self, row: int):
         """One row of the pixel eyeball: open most of the time, a quick blink now and
         then, with the pupil glinting red on a beat."""
-        blink = (self.spin % 44) < 3          # shut briefly, then wide open again
-        frames = EYE_SHUT if blink else EYE_OPEN
-        art = frames[row] if row < len(frames) else " " * 9
-        glint = (self.spin // 5) % 6 == 0
+        blink = (self.spin % 44) < 4
+        frames = MASCOT_BLINK if blink else MASCOT_OPEN
+        art = (frames[row] if row < len(frames) else "").ljust(13)
+        glint = (self.spin // 4) % 6 == 0
         segs = []
         for ch in art:
-            if ch == "P":                       # pupil, watching
-                segs.append(("class:banner.hi" if glint else "class:evil", "\u25cf"))
+            if ch == "●":
+                segs.append(("class:banner.hi" if glint else "class:evil", ch))
             elif ch == "\u2593":                 # ▓ iris
                 segs.append(("class:banner.hi", ch))
-            elif ch == "\u25ac":                 # ▬ closed-lid slit
+            elif ch in {"━", "▾"}:
                 segs.append(("class:evil", ch))
             else:
                 segs.append(("class:banner", ch))
@@ -350,7 +343,7 @@ class KiloApp:
             if show_mascot:
                 # Keep the animated mascot on the actual right edge, not at a
                 # hard-coded column that drifts with terminal size/font width.
-                pad = max(2, self._cw() - len(art) - self._seg_len(line) - 9 - 4)
+                pad = max(2, self._cw() - len(art) - self._seg_len(line) - 13 - 4)
                 rows.append(("class:banner", " " * pad))
                 rows += self._mascot(i)
             rows.append(("", "\n"))
