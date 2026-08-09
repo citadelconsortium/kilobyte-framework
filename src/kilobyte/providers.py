@@ -39,6 +39,7 @@ _ATTRIBUTION = {
     "HTTP-Referer": "https://github.com/citadelconsortium/kilobyte",
     "X-Title": "Kilobyte",
 }
+_USER_AGENT = "Kilobyte/1.0 (+https://github.com/citadelconsortium/kilobyte)"
 
 
 class ProviderError(KilobyteError):
@@ -193,7 +194,7 @@ class ProviderRegistry:
             url = f"{prov.base_url}/models"
         req = urllib.request.Request(
             url,
-            headers={"Authorization": f"Bearer {prov.api_key}", "Accept": "application/json", **_ATTRIBUTION},
+            headers={"Authorization": f"Bearer {prov.api_key}", "Accept": "application/json", "User-Agent": _USER_AGENT, **_ATTRIBUTION},
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
@@ -283,6 +284,7 @@ class ProviderRegistry:
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {provider.api_key}",
                     "Accept": "text/event-stream",
+                    "User-Agent": _USER_AGENT,
                     **_ATTRIBUTION,
                 },
             )
