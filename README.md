@@ -34,6 +34,9 @@ is downloaded** — this framework ships without a brain. Package provisioning s
 Debian/Ubuntu, Fedora/RHEL, openSUSE, and Alpine; non-systemd hosts receive the exact daemon
 command to register with their native init system.
 
+`kilo status` provides a compact color-coded `READY`, `DEGRADED`, `FAILED`, or `STOPPED`
+state with daemon, brain, cache, runtime, uptime, and memory details.
+
 Telegram publishes `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
 the real command menu. An allow-listed owner can select cloud inference from chat while the
 remote tool boundary remains read-only: no shell, writes, services, or destructive actions.

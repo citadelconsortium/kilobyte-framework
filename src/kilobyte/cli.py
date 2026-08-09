@@ -16,11 +16,64 @@ from .doctor import run_checks
 from .errors import KilobyteError
 from .resources import ResourceManager
 from .rpc import RPCClient
-from .tui import DIM, GREEN, RESET, TerminalUI, YELLOW
+from .theme import BOLD, RED
+from .tui import DIM, GREEN, RESET, YELLOW, TerminalUI
 
 
 def json_print(value: Any) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=False))
+
+
+def _duration(seconds: int | float) -> str:
+    total = max(0, int(seconds))
+    days, total = divmod(total, 86400)
+    hours, total = divmod(total, 3600)
+    minutes, secs = divmod(total, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or days:
+        parts.append(f"{hours}h")
+    if minutes or hours or days:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
+def print_status(status: dict[str, Any] | None) -> None:
+    """Render status for people; JSON is an implementation detail, not a UI."""
+    print(f"{BOLD}KILOBYTE STATUS{RESET}")
+    if not status:
+        print(f"{'STATE':<12} {RED}STOPPED{RESET}")
+        print(f"{'daemon':<12} {RED}INACTIVE{RESET}")
+        print(f"{'action':<12} sudo systemctl start kilobyte")
+        return
+
+    running = bool(status.get("running"))
+    healthy = bool(status.get("healthy"))
+    ready = running and healthy
+    state = "READY" if ready else "DEGRADED" if running else "FAILED"
+    state_color = GREEN if ready else YELLOW if running else RED
+    profile = status.get("profile") or {}
+    memory = status.get("memory") or {}
+    model = Path(str(status.get("model") or "unknown")).name
+    cache = "WARMING" if status.get("warming") else "READY"
+    cache_color = YELLOW if status.get("warming") else GREEN
+
+    print(f"{'STATE':<12} {state_color}{state}{RESET}")
+    print(f"{'daemon':<12} {GREEN}ACTIVE{RESET}  pid {status.get('pid', '?')}")
+    print(f"{'brain':<12} {(GREEN if healthy else RED)}{'HEALTHY' if healthy else 'UNHEALTHY'}{RESET}  {model}")
+    print(f"{'cache':<12} {cache_color}{cache}{RESET}")
+    print(f"{'uptime':<12} {_duration(status.get('uptime_seconds', 0))}")
+    print(
+        f"{'runtime':<12} {profile.get('threads', '?')} threads · "
+        f"{profile.get('context_size', '?')} context · {profile.get('gpu_layers', 0)} GPU layers"
+    )
+    print(
+        f"{'memory':<12} {profile.get('available_mb', '?')} MiB available · "
+        f"{memory.get('sessions', 0)} sessions · {memory.get('facts', 0)} facts · "
+        f"{memory.get('skills', 0)} skills"
+    )
 
 
 def runtime_summary(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -287,7 +340,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
     if args.command == "chat":
         await TerminalUI(client).ask(" ".join(args.text))
     elif args.command == "status":
-        json_print(await client.request("status"))
+        print_status(await client.request("status"))
     elif args.command == "resources":
         try:
             json_print(await client.request("resources"))
@@ -346,6 +399,9 @@ def main() -> None:
         # Quitting the TUI (Ctrl-Q/Ctrl-C) must exit cleanly, not dump a traceback.
         raise SystemExit(0) from None
     except (FileNotFoundError, ConnectionRefusedError):
+        if args.command == "status":
+            print_status(None)
+            raise SystemExit(2) from None
         print(f"{YELLOW}Kilobyte daemon is not running.{RESET} Try: sudo systemctl start kilobyte", file=sys.stderr)
         raise SystemExit(2) from None
     except KilobyteError as exc:
