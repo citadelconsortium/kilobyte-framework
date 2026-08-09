@@ -34,6 +34,8 @@ The one-line installer bootstraps this repository, installs the app/service, and
 does not download a brain. Use `/cloud` for a configured provider or `/gguf` for
 an operator-supplied local model. `/botkey` configures Telegram through the daemon
 RPC; Telegram `/commands` is an alias for `/help`.
+The live stats bar intentionally omits the user's request text so status indicators stay
+compact; it shows phase, request count, tools, tokens, model, queue, and context instead.
 
 ## Verification and limits
 

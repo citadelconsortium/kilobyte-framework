@@ -390,9 +390,6 @@ class KiloApp:
             bar += [("class:stat.k", "   ⧉ queued "), ("class:stat", f"{qn}")]
         if self.private_mode:
             bar += [("class:stat.k", "   🛡 "), ("class:kilo", "private")]
-        if self.busy and self.current_task:
-            task = self.current_task if len(self.current_task) <= 32 else self.current_task[:31] + "…"
-            bar += [("class:stat.k", "   ▸ "), ("class:dim", task)]
         ctx = (self.status.get("profile") or {}).get("context_size")
         if ctx:
             used = (self.usage or {}).get("total_tokens")
