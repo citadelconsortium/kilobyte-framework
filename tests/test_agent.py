@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kilobyte.agent import Agent
+from kilobyte.agent import Agent, _parse_inline_tool_calls
 from kilobyte.config import Settings
 from kilobyte.memory import MemoryStore
 from kilobyte.security import PermissionManager
@@ -72,7 +72,65 @@ class PuntingRuntime:
             yield {"delta": {"content": "1+1 is 2."}}
 
 
+class InlineToolRuntime:
+    """Simulate providers that put tool XML in content instead of delta.tool_calls."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def ensure_ready(self):
+        pass
+
+    async def chat_stream(self, payload):
+        self.calls += 1
+        if self.calls == 1:
+            raw = (
+                "Sir, let me check the real machine first.\n\n"
+                "<tool_call><function=system_info></function></tool_call>"
+            )
+            starts = (0, 9, 31, 48, 62)
+            ends = (9, 31, 48, 62, len(raw))
+            for start, end in zip(starts, ends, strict=True):
+                yield {"delta": {"content": raw[start:end]}}
+        else:
+            yield {"delta": {"content": "Research complete."}}
+
+
 class AgentTests(unittest.IsolatedAsyncioTestCase):
+    def test_inline_parser_allows_only_current_interface_tools(self):
+        raw = (
+            '<tool_call><function=web_search><parameter=query>"citadel" research'
+            "</parameter></function></tool_call>"
+            "<tool_call><function=run_command><parameter=command>id</parameter>"
+            "</function></tool_call>"
+        )
+        clean, calls, rejected, saw = _parse_inline_tool_calls(raw, {"web_search"})
+        self.assertTrue(saw)
+        self.assertEqual(clean, "")
+        self.assertEqual([call["function"]["name"] for call in calls], ["web_search"])
+        self.assertEqual(
+            json.loads(calls[0]["function"]["arguments"]),
+            {"query": '"citadel" research'},
+        )
+        self.assertEqual(rejected, ["run_command"])
+
+    async def test_inline_tool_markup_is_dispatched_and_never_displayed(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            settings = Settings(data_dir=root, config_dir=root, runtime_dir=root, log_dir=root, home=root)
+            memory = MemoryStore(root / "memory.db")
+            tools = ToolRegistry(settings, memory, PermissionManager(root / "policy.json"))
+            runtime = InlineToolRuntime()
+            agent = Agent(settings, runtime, memory, tools)  # type: ignore[arg-type]
+            events = [event async for event in agent.run("inspect this machine")]
+            visible = "".join(event.get("text", "") for event in events)
+            self.assertNotIn("<tool_call>", visible)
+            self.assertNotIn("<function=", visible)
+            self.assertTrue(any(event["type"] == "tool_start" for event in events))
+            self.assertIn("Research complete.", visible)
+            self.assertEqual(runtime.calls, 2)
+            memory.close()
+
     async def test_announced_action_is_nudged_to_completion(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

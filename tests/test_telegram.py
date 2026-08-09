@@ -59,6 +59,52 @@ class TelegramConfigTests(unittest.TestCase):
 
 
 class TelegramDeliveryTests(IsolatedAsyncioTestCase):
+    async def test_reply_resets_tool_markup_and_renders_clean_research(self):
+        class ResearchAgent:
+            def run(self, *args, **kwargs):
+                async def generate():
+                    yield {"type": "brain", "label": "cloud:test"}
+                    yield {"type": "token", "text": "Sir, let me check"}
+                    yield {"type": "response_reset"}
+                    yield {"type": "tool_start", "name": "web_search", "arguments": {"query": "citadel"}}
+                    yield {"type": "tool_end", "name": "web_search", "ok": True, "summary": "2 sources"}
+                    yield {"type": "token", "text": "## Findings\n- **Verified:** result, Sir."}
+
+                return generate()
+
+        with tempfile.TemporaryDirectory() as raw:
+            bridge = TelegramBridge(
+                _config(raw, {"token": "secret", "allowed_chat_ids": [42]}),
+                ResearchAgent(),
+            )  # type: ignore[arg-type]
+            sent: list[str] = []
+            progress: list[str] = []
+            edits: list[str] = []
+
+            async def capture_send(token, chat_id, text, keyboard=None):
+                sent.append(text)
+
+            async def capture_progress(token, chat_id, text):
+                progress.append(text)
+                return len(progress)
+
+            async def capture_edit(token, chat_id, message_id, text):
+                edits.append(text)
+
+            async def noop(*args, **kwargs):
+                return None
+
+            bridge.send = capture_send  # type: ignore[method-assign]
+            bridge._send_progress = capture_progress  # type: ignore[method-assign]
+            bridge._edit_progress = capture_edit  # type: ignore[method-assign]
+            bridge._delete = noop  # type: ignore[method-assign]
+            await bridge._reply("secret", 42, "research")
+            self.assertEqual(len(progress), 2)
+            self.assertNotIn("let me check", sent[-1])
+            self.assertIn("<b>Findings</b>", sent[-1])
+            self.assertIn("• <b>Verified:</b> result", sent[-1])
+            self.assertTrue(any("web_search" in edit for edit in edits))
+
     async def test_failure_is_reported_instead_of_silence(self):
         """A crash mid-generation must still produce a message; silence is
         indistinguishable from a hung bot."""

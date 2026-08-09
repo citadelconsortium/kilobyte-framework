@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .activity import format_arguments, format_summary
 from .render import MarkdownStream
 from .rpc import RPCClient
 from .theme import (
@@ -164,12 +165,12 @@ class TerminalUI:
         frame = 0
         while True:
             if state["streaming"]:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.06)
                 continue
             now = time.monotonic()
             elapsed = now - state["started"]
             glyph = SPINNER[frame % len(SPINNER)]
-            phase = state["phase"] or ACTIVITY_WORDS[(frame // 12) % len(ACTIVITY_WORDS)]
+            phase = state["phase"] or ACTIVITY_WORDS[(frame // 8) % len(ACTIVITY_WORDS)]
             # Trailing dots drift under the word so a long, quiet step still looks alive.
             dots = ("." * ((frame // 3) % 4)).ljust(3)
             model = state.get("model") or "local brain"
@@ -179,7 +180,7 @@ class TerminalUI:
             )
             sys.stdout.flush()
             frame += 1
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.06)
 
     async def _permission(self, event: dict[str, Any], writer: asyncio.StreamWriter) -> None:
         prompt = f"\n{YELLOW}Permission required [{event['risk']}]:{RESET} {event['detail']}\nAllow once? [y/N] "
@@ -251,6 +252,14 @@ class TerminalUI:
                         at_line_start = True
                     emit(markdown.feed(event.get("text", "")))
                     sys.stdout.flush()
+                elif kind == "response_reset":
+                    emit(markdown.flush())
+                    if not at_line_start:
+                        sys.stdout.write("\n")
+                    print(f"\r\033[2K{GREEN}{Box.v}{RESET} {TOOL} {DIM}intercepted model tool markup; dispatching safely{RESET}")
+                    markdown = MarkdownStream()
+                    printed = False
+                    at_line_start = True
                 elif kind == "tool_start":
                     emit(markdown.flush())
                     if not at_line_start:
@@ -259,8 +268,7 @@ class TerminalUI:
                     tools_used.append(event["name"])
                     state["phase"] = f"running {event['name']}"
                     state["streaming"] = False
-                    args = event.get("arguments") or {}
-                    detail = ", ".join(f"{k}={str(v)[:40]}" for k, v in list(args.items())[:3])
+                    detail = format_arguments(event.get("arguments") or {}, 700)
                     sys.stdout.write(f"\r\033[2K{GREEN}{Box.v}{RESET} {TOOL} {BOLD}{event['name']}{RESET}{(' ' + DIM + detail + RESET) if detail else ''}\n")
                     sys.stdout.flush()
                     printed = False
@@ -268,7 +276,7 @@ class TerminalUI:
                 elif kind == "tool_end":
                     took = time.monotonic() - tool_started
                     icon = OK if event.get("ok") else WARN
-                    summary = str(event.get("summary", ""))[:140]
+                    summary = format_summary(event.get("summary", ""), 700)
                     print(f"\r\033[2K{GREEN}{Box.v}{RESET}   {icon} {DIM}{event['name']} · {took:0.1f}s · {summary}{RESET}")
                     state["phase"] = "interpreting result"
                     state["streaming"] = False

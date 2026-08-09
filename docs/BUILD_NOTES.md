@@ -3,7 +3,7 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.13.0 · brain-free distribution (operator-supplied GGUF or explicit
+Framework version 1.13.1 · brain-free distribution (operator-supplied GGUF or explicit
 cloud provider).
 
 ## What is in it
@@ -39,6 +39,21 @@ and a stricter read-only policy for anything arriving remotely.
 installer that provisions dependencies, the service user, the model and the service.
 
 ## Changes and why
+
+### 1.13.1: reliable research tools and cleaner live interfaces
+
+**Provider tool-protocol recovery.** Some cloud chat templates return XML-like
+`<tool_call>` blocks in ordinary content instead of native `delta.tool_calls`. The agent
+now guards the stream, removes that protocol from user-visible output, validates recovered
+names against the active interface schema, and dispatches allowed calls normally. This
+keeps Telegram read-only even if the model asks for a disallowed tool.
+
+**Presentation and activity.** Telegram uses a fast progress animation plus a separate
+redacted work-log message, and renders common Markdown into safe HTML. The full-screen TUI
+likewise separates live work from the answer and both terminal renderers show complete
+redacted arguments/results. The security agent now learns target-specific approaches via
+skills instead of receiving a canned playbook. Active-route context reporting no longer
+labels a cloud model with the local runtime's 8192-token window.
 
 ### 1.13.0: disconnect-safe inference and Telegram cloud control
 

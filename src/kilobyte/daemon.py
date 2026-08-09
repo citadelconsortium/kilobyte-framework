@@ -28,13 +28,6 @@ async def serve() -> None:
     )
     log = logging.getLogger("kilobyte")
     memory = MemoryStore(settings.database_path, settings.memory_message_limit, settings.memory_fact_limit, settings.memory_skill_limit)
-    # Keep a verified, reusable security-tool learning procedure available on every
-    # installation.  It is refined in place rather than duplicated on each restart.
-    memory.save_skill(
-        "authorized-security-tool-learning",
-        "when the security/hacking agent encounters an unfamiliar tool or platform",
-        "Confirm the authorised target and scope; recall matching skills; consult the offline reference and official vendor/project documentation; run the tool's local --help/version or a harmless lab-only probe; capture and interpret the real output; corroborate risky claims; never run destructive actions or unapproved targets; record the verified command, platform caveats, evidence, and rollback in save_skill.",
-    )
     memory.save_skill("verified-mathematics", "when solving equations, calculations or quantitative questions", "Define variables and units; solve symbolically; verify with an independent safe computation; check dimensions, signs, edge cases and rounding; state assumptions and precision.")
     memory.save_skill("engineering-design-review", "when designing or analysing a mechanical, electrical, civil, chemical, aerospace or other engineered system", "Extract requirements and constraints; identify standards and safety factors; state assumptions; calculate or simulate; verify critical values; document risks, tests, acceptance criteria and rollback using authoritative sources.")
     resources = ResourceManager(settings)

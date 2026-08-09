@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import aclosing
@@ -53,6 +54,65 @@ _PUNT_TAILS: tuple[str, ...] = (
     "computing",
     "checking now",
 )
+
+_INLINE_TOOL_BLOCK_RE = re.compile(
+    r"<tool_call>\s*<function=([^>]+)>\s*(.*?)\s*</function>\s*</tool_call>",
+    re.IGNORECASE | re.DOTALL,
+)
+_INLINE_PARAMETER_RE = re.compile(
+    r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", re.IGNORECASE | re.DOTALL
+)
+_INLINE_MARKER_RE = re.compile(r"<(?:tool_call|function=)", re.IGNORECASE)
+_STREAM_GUARD_CHARS = 64
+
+
+def _inline_argument(raw: str) -> Any:
+    """Decode JSON scalars while preserving ordinary query strings and URLs."""
+    value = raw.strip()
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            return value[1:-1]
+        return value
+
+
+def _parse_inline_tool_calls(
+    content: str, allowed_names: set[str]
+) -> tuple[str, list[dict[str, Any]], list[str], bool]:
+    """Recover XML-like tool calls emitted as text by some cloud chat templates.
+
+    Only tools in the interface's already-filtered schema are converted. This makes the
+    compatibility path obey exactly the same remote/read-only boundary as native tool
+    calls instead of becoming a second, less restricted dispatcher.
+    """
+    saw_markup = bool(_INLINE_MARKER_RE.search(content))
+    calls: list[dict[str, Any]] = []
+    rejected: list[str] = []
+    for match in _INLINE_TOOL_BLOCK_RE.finditer(content):
+        name = match.group(1).strip()
+        arguments = {
+            parameter.group(1).strip(): _inline_argument(parameter.group(2))
+            for parameter in _INLINE_PARAMETER_RE.finditer(match.group(2))
+        }
+        if name not in allowed_names:
+            rejected.append(name)
+            continue
+        calls.append(
+            {
+                "id": "inline-" + uuid.uuid4().hex,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": json.dumps(arguments, ensure_ascii=False),
+                },
+            }
+        )
+    clean = _INLINE_TOOL_BLOCK_RE.sub("", content).strip()
+    if saw_markup and not calls and not rejected:
+        marker = _INLINE_MARKER_RE.search(clean)
+        clean = clean[: marker.start()].strip() if marker else clean
+    return clean, calls, rejected, saw_markup
 
 
 def _looks_like_punt(content: str | None) -> bool:
@@ -244,6 +304,7 @@ class Agent:
         # answer. One follow-through nudge turns that into either the tool call or the real
         # answer; bounded to a single retry so it can never loop.
         nudged = False
+        inline_nudged = False
         # Framework-enforced address: the turn opens with 'Sir,' and closes with
         # ', Sir.' no matter how weak the brain is. See the wrap points below.
         sir_started = False
@@ -286,6 +347,9 @@ class Agent:
                 payload["tools"] = tool_schemas
                 payload["tool_choice"] = "auto"
             content_parts: list[str] = []
+            pending_content = ""
+            inline_markup = False
+            emitted_this_step = False
             calls: dict[int, dict[str, Any]] = {}
             usage: dict[str, Any] | None = None
             # aclosing is required here: if this generator itself gets closed while
@@ -306,11 +370,28 @@ class Agent:
                     content = delta.get("content")
                     if content:
                         content_parts.append(content)
-                        if not sir_started and content.strip():
+                        if inline_markup:
+                            continue
+                        pending_content += content
+                        marker = _INLINE_MARKER_RE.search(pending_content)
+                        if marker:
+                            inline_markup = True
+                            pending_content = ""
+                            if emitted_this_step:
+                                yield {"type": "response_reset"}
+                            emitted_this_step = False
+                            sir_started = False
+                            continue
+                        if len(pending_content) <= _STREAM_GUARD_CHARS:
+                            continue
+                        visible = pending_content[:-_STREAM_GUARD_CHARS]
+                        pending_content = pending_content[-_STREAM_GUARD_CHARS:]
+                        if not sir_started and visible.strip():
                             sir_started = True
-                            if not content.lstrip()[:3].lower().startswith("sir"):
+                            if not visible.lstrip()[:3].lower().startswith("sir"):
                                 yield {"type": "token", "text": "Sir, "}
-                        yield {"type": "token", "text": content}
+                        emitted_this_step = True
+                        yield {"type": "token", "text": visible}
                     for call in delta.get("tool_calls") or []:
                         index = int(call.get("index", 0))
                         target = calls.setdefault(
@@ -329,8 +410,26 @@ class Agent:
                             function.get("arguments") or ""
                         )
 
+            if pending_content and not inline_markup:
+                if not sir_started and pending_content.strip():
+                    sir_started = True
+                    if not pending_content.lstrip()[:3].lower().startswith("sir"):
+                        yield {"type": "token", "text": "Sir, "}
+                emitted_this_step = True
+                yield {"type": "token", "text": pending_content}
+
             content = "".join(content_parts)
             tool_calls = [calls[index] for index in sorted(calls)]
+            allowed_names = {
+                schema.get("function", {}).get("name", "") for schema in tool_schemas
+            }
+            clean, recovered, rejected, saw_inline = _parse_inline_tool_calls(
+                content, allowed_names
+            )
+            if saw_inline:
+                content = clean
+                if not tool_calls:
+                    tool_calls = recovered
             assistant: dict[str, Any] = {
                 "role": "assistant",
                 "content": content or None,
@@ -339,6 +438,26 @@ class Agent:
                 assistant["tool_calls"] = tool_calls
             messages.append(assistant)
             if not tool_calls:
+                if saw_inline and (rejected or not recovered) and not inline_nudged:
+                    inline_nudged = True
+                    available = ", ".join(sorted(allowed_names))
+                    detail = (
+                        "Unavailable here: " + ", ".join(sorted(set(rejected))) + ". "
+                        if rejected
+                        else "The attempted tool markup was malformed. "
+                    )
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                detail
+                                + "Never print or simulate tool-call markup. Use only the provided "
+                                f"tools ({available}) through native tool calling, then finish the task."
+                            ),
+                        }
+                    )
+                    yield {"type": "thinking"}
+                    continue
                 # The model stopped without calling a tool. If it only announced an action
                 # instead of delivering one, push it once to actually finish rather than
                 # recording the promise as the answer.

@@ -128,7 +128,7 @@ class RPCServer:
                 try:
                     models = await asyncio.to_thread(
                         self.agent.providers.list_models,
-                        None,
+                        request.get("name"),
                         bool(request.get("only_free", True)),
                     )
                     await self._send(
@@ -142,7 +142,11 @@ class RPCServer:
                     )
             elif command == "provider_info":
                 await self._send(
-                    writer, {"type": "result", "data": self.agent.providers.info()}
+                    writer,
+                    {
+                        "type": "result",
+                        "data": self.agent.providers.info(request.get("name")),
+                    },
                 )
             elif command == "set_model":
                 try:

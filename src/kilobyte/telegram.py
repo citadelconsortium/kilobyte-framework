@@ -10,8 +10,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from .activity import format_arguments, format_summary
 from .agent import Agent
 from .profiles import PROFILES
+from .telegram_render import telegram_html, telegram_html_chunks
 
 log = logging.getLogger("kilobyte.telegram")
 
@@ -22,7 +24,7 @@ class TelegramBridge:
     CONFIG_POLL_SECONDS = 30
     # How often the progress message is rewritten. Frequent enough that the sender can
     # see it is alive, slow enough to stay clear of Telegram's edit rate limits.
-    PROGRESS_SECONDS = 3
+    PROGRESS_SECONDS = 1.2
 
     def __init__(self, config_path: Path, agent: Agent):
         self.config_path = config_path
@@ -99,7 +101,7 @@ class TelegramBridge:
 
     # Rotating glyphs for the live progress card, so a long-running reply visibly animates
     # rather than sitting on a static line that reads as a hang.
-    SPINNER = "◐◓◑◒"
+    SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     # A small icon per phase makes the progress card scannable at a glance.
     PHASE_ICONS = {"thinking": "💭", "warming": "🔥", "running": "⚙️", "reading": "📖"}
     BAR_FILLED = "█"
@@ -147,9 +149,7 @@ class TelegramBridge:
         text: str,
         keyboard: dict[str, Any] | None = None,
     ) -> None:
-        chunks = [
-            text[start : start + 3900] for start in range(0, len(text) or 1, 3900)
-        ] or ["(empty response)"]
+        chunks = telegram_html_chunks(text)
         for index, chunk in enumerate(chunks):
             data: dict[str, Any] = {
                 "chat_id": chat_id,
@@ -274,7 +274,12 @@ class TelegramBridge:
             log.error("telegram reply task failed: %s", error)
 
     async def _tick_progress(
-        self, token: str, chat_id: int, message_id: int | None, state: dict[str, Any]
+        self,
+        token: str,
+        chat_id: int,
+        message_id: int | None,
+        work_message_id: int | None,
+        state: dict[str, Any],
     ) -> None:
         """Rewrite the progress message on a timer.
 
@@ -303,17 +308,38 @@ class TelegramBridge:
                     *([f"🔧 <i>{html.escape(' → '.join(tools))}</i>"] if tools else []),
                 ]
             )
-            preview = "".join(state.get("output", []))[-1200:]
-            if preview:
-                body += f"\n\n<b>live reply</b>\n<code>{html.escape(preview)}</code>"
             await self._edit_progress(token, chat_id, message_id, body)
+            if frame % 2 == 0:
+                await self._edit_progress(
+                    token, chat_id, work_message_id, self._live_work_body(state)
+                )
+
+    @staticmethod
+    def _live_work_body(state: dict[str, Any], finished: bool = False) -> str:
+        """A separate persistent card for safe machine actions and streamed output."""
+        title = "✅ <b>Work log</b>" if finished else "📟 <b>Live machine output</b>"
+        entries = list(state.get("work", []))[-16:]
+        body = title
+        if entries:
+            body += "\n<pre>" + html.escape("\n".join(entries)[-2200:]) + "</pre>"
+        else:
+            body += "\n<i>waiting for the first machine action…</i>"
+        preview = "".join(state.get("output", []))[-1100:].strip()
+        if preview and not finished:
+            body += "\n\n<b>Live reply</b>\n<pre>" + html.escape(preview) + "</pre>"
+        return body
 
     async def _reply(self, token: str, chat_id: int, text: str) -> None:
         typing = asyncio.create_task(self._keep_typing(token, chat_id))
         # A reply can take minutes here; a status message that is edited as work
         # progresses is the only way the sender can tell it is alive.
         progress = await self._send_progress(
-            token, chat_id, "◐ <b>Kilo is working</b>\n\n💭 thinking"
+            token, chat_id, "⠋ <b>Kilo is working</b>\n\n💭 thinking"
+        )
+        work_message = await self._send_progress(
+            token,
+            chat_id,
+            "📟 <b>Live machine output</b>\n<i>waiting for the first machine action…</i>",
         )
         state: dict[str, Any] = {
             "phase": "thinking",
@@ -321,9 +347,10 @@ class TelegramBridge:
             "started": time.monotonic(),
             "tools": [],
             "output": [],
+            "work": [],
         }
         ticker = asyncio.create_task(
-            self._tick_progress(token, chat_id, progress, state)
+            self._tick_progress(token, chat_id, progress, work_message, state)
         )
         output: list[str] = []
         agent_label: str | None = None
@@ -332,6 +359,7 @@ class TelegramBridge:
         profile = self._chat_profiles.get(chat_id)
         session_id = self._sessions.get(chat_id, f"telegram-{chat_id}")
         fresh = chat_id in self._fresh
+        tool_started: dict[str, float] = {}
         try:
             async for event in self.agent.run(
                 str(text),
@@ -347,16 +375,23 @@ class TelegramBridge:
                     token_text = event.get("text", "")
                     output.append(token_text)
                     state["output"].append(token_text)
+                elif kind == "response_reset":
+                    output.clear()
+                    state["output"].clear()
+                    state["work"].append("↻ intercepted model tool markup; dispatching safely")
                 elif kind == "agent":
                     agent_label = str(event.get("profile") or "")
+                    state["work"].append(f"◇ agent  {agent_label}")
                 elif kind == "brain":
                     brain_label = str(event.get("label") or "")
                     state["phase"] = f"using {brain_label}"
+                    state["work"].append(f"◇ brain  {brain_label}")
                 elif kind == "warming":
                     state["phase"], state["phase_kind"] = (
                         "warming the model cache (one-off)",
                         "warming",
                     )
+                    state["work"].append("◌ cache  warming model prefix")
                 elif kind == "thinking":
                     # No step number: it read as stuck. The timer conveys progress.
                     state["phase"], state["phase_kind"] = "thinking", "thinking"
@@ -364,18 +399,33 @@ class TelegramBridge:
                     name = str(event.get("name"))
                     state["tools"].append(name)
                     state["phase"], state["phase_kind"] = f"running {name}", "running"
+                    tool_started[name] = time.monotonic()
+                    detail = format_arguments(event.get("arguments") or {}, 420)
+                    state["work"].append(f"▶ {name}{'  ' + detail if detail else ''}")
                 elif kind == "tool_end":
+                    name = str(event.get("name"))
+                    elapsed = time.monotonic() - tool_started.pop(name, time.monotonic())
                     state["phase"], state["phase_kind"] = (
-                        f"read {event.get('name')} · interpreting",
+                        f"read {name} · interpreting",
                         "reading",
                     )
+                    mark = "✓" if event.get("ok") else "✗"
+                    summary = format_summary(event.get("summary", ""), 520)
+                    state["work"].append(
+                        f"{mark} {name}  {elapsed:0.1f}s{'  ' + summary if summary else ''}"
+                    )
                 elif kind == "error":
-                    output.append(f"\n[error: {event.get('error')}]")
+                    error = format_summary(event.get("error"), 520)
+                    output.append(f"\n[error: {error}]")
+                    state["work"].append(f"✗ error  {error}")
         except Exception as exc:
             # Silence looks identical to a hung bot, so always tell the user.
             log.exception("telegram request failed for chat %s", chat_id)
             ticker.cancel()
             await self._delete(token, chat_id, progress)
+            await self._edit_progress(
+                token, chat_id, work_message, self._live_work_body(state, finished=True)
+            )
             await self.send(
                 token,
                 chat_id,
@@ -388,7 +438,10 @@ class TelegramBridge:
             ticker.cancel()
             await asyncio.gather(typing, ticker, return_exceptions=True)
         await self._delete(token, chat_id, progress)
-        answer = html.escape("".join(output).strip())
+        await self._edit_progress(
+            token, chat_id, work_message, self._live_work_body(state, finished=True)
+        )
+        answer = telegram_html("".join(output).strip())
         took = int(time.monotonic() - state["started"])
         minutes, seconds = divmod(took, 60)
         clock = f"{minutes}m {seconds:02d}s" if minutes else f"{seconds}s"
@@ -620,16 +673,40 @@ class TelegramBridge:
                 selected_provider = self._chat_providers.get(chat_id)
                 if selected_provider:
                     route = self.agent.providers.resolve(selected_provider).label
+                    context_limit = self.agent.providers.context_limit(selected_provider)
+                    if not context_limit:
+                        try:
+                            await asyncio.wait_for(
+                                asyncio.to_thread(
+                                    self.agent.providers.list_models,
+                                    selected_provider,
+                                    False,
+                                ),
+                                timeout=10,
+                            )
+                        except Exception:
+                            pass
+                        context_limit = self.agent.providers.context_limit(selected_provider)
+                    context_text = (
+                        f"{context_limit} tokens"
+                        if context_limit
+                        else "provider-managed (not advertised)"
+                    )
+                    compute_text = "hosted cloud"
                 else:
                     route = f"local:{Path(str(status.get('model', ''))).stem}"
+                    context_text = f"{profile.get('context_size')} tokens"
+                    compute_text = (
+                        f"threads {profile.get('threads')}   ·   gpu layers {profile.get('gpu_layers')}"
+                    )
                 lines = [
                     f"{'🟢' if running else '🔴'} <b>Kilo — {'running' if running else 'stopped'}</b>",
                     "",
                     f"🧠 <b>route</b>    <code>{html.escape(route)}</code>",
                     f"🧩 <b>agent</b>    <code>{html.escape(self._chat_profiles.get(chat_id, 'auto'))}</code>",
                     f"⏱ <b>uptime</b>   {uptime_str}",
-                    f"📐 <b>context</b>  {profile.get('context_size')} tokens",
-                    f"⚙️ <b>threads</b>  {profile.get('threads')}   ·   gpu layers {profile.get('gpu_layers')}",
+                    f"📐 <b>context</b>  {context_text}",
+                    f"⚙️ <b>compute</b>  {compute_text}",
                     f"💾 <b>memory</b>   {mem_line}",
                 ]
                 await self.send(token, chat_id, "\n".join(lines), self.MENU)
