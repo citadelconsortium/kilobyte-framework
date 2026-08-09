@@ -10,7 +10,7 @@ User=kilobyte
 Group=kilobyte
 Environment=PYTHONPATH=/opt/kilobyte/app/src
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python -m kilobyte.daemon
+ExecStart=/usr/bin/python3 -m kilobyte.daemon
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=300
