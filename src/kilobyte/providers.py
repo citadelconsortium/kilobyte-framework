@@ -187,6 +187,7 @@ class ProviderRegistry:
         For OpenRouter, free models (id ending ':free') are surfaced first."""
         import urllib.request
         prov = self.resolve(name)
+        is_openrouter = prov.name.lower() == "openrouter" or "openrouter.ai" in prov.base_url.lower()
         if prov.name.lower() == "cloudflare":
             # Cloudflare does not expose an OpenAI-style /models route. Its account API
             # provides the searchable model catalogue at /ai/models/search.
@@ -197,17 +198,24 @@ class ProviderRegistry:
             url,
             headers={"Authorization": f"Bearer {prov.api_key}", "Accept": "application/json", "User-Agent": _USER_AGENT, **_ATTRIBUTION},
         )
+        free_ids: list[str] = []
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = json.load(r)
             ids = _model_ids(data)
             free_ids = []
-            if "openrouter" in prov.base_url:
+            if is_openrouter:
                 for item in data.get("data") or []:
                     if not isinstance(item, dict): continue
                     ident = item.get("id")
                     pricing = item.get("pricing") or {}
-                    if ident and (str(ident).endswith(":free") or (str(pricing.get("prompt", "")) in {"0", "0.0", "0.000000"} and str(pricing.get("completion", "")) in {"0", "0.0", "0.000000"})):
+                    prompt_price = str(pricing.get("prompt", "")).strip()
+                    completion_price = str(pricing.get("completion", "")).strip()
+                    try:
+                        zero_priced = float(prompt_price) == 0.0 and float(completion_price) == 0.0
+                    except (TypeError, ValueError):
+                        zero_priced = False
+                    if ident and (str(ident).endswith(":free") or zero_priced):
                         free_ids.append(str(ident))
             for item in (data.get("data") or data.get("models") or data.get("result") or []):
                 if not isinstance(item, dict):
@@ -222,14 +230,16 @@ class ProviderRegistry:
             # Several otherwise compatible services do not publish a catalogue route.
             # Keep /model useful and honest: expose the known configured model rather than
             # presenting an empty picker, while logging the catalogue failure for diagnosis.
-            log.warning("%s model catalogue unavailable (%s); using configured default", prov.name, exc)
+            log.warning("%s model catalogue unavailable (%s); using configured default only when free-only filtering is disabled", prov.name, exc)
             ids = [prov.model]
+        if only_free and is_openrouter:
+            # Never put a paid configured default into a free-only picker. In
+            # particular, a catalogue outage must not silently turn /model into
+            # a paid-model list; the caller can retry or enter an explicit model.
+            free = sorted(set(free_ids or [i for i in ids if str(i).endswith(":free")]))
+            return free
         if prov.model not in ids:
             ids.insert(0, prov.model)
-        if only_free and "openrouter" in prov.base_url:
-            free = sorted(set(free_ids or [i for i in ids if str(i).endswith(":free")]))
-            if free:
-                return free
         return sorted(ids)
 
     def set_model(self, name: str, model: str) -> str:

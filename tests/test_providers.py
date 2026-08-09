@@ -92,6 +92,25 @@ class ProviderConfigureTests(unittest.TestCase):
                 def read(self): return json.dumps(payload).encode()
             with patch("urllib.request.urlopen", return_value=JsonResponse()):
                 self.assertEqual(ProviderRegistry(path).list_models("openrouter", only_free=True), ["free/model"])
+    def test_openrouter_free_picker_never_falls_back_to_paid_default(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+        with tempfile.TemporaryDirectory() as raw:
+            path = _config(raw, {"providers": {"openrouter": {"api_key": "k", "model": "paid/default"}}})
+            with patch("urllib.request.urlopen", side_effect=OSError("catalog offline")):
+                self.assertEqual(ProviderRegistry(path).list_models("openrouter", only_free=True), [])
+    def test_openrouter_scientific_zero_pricing_is_free(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+        with tempfile.TemporaryDirectory() as raw:
+            path = _config(raw, {"providers": {"openrouter": {"api_key": "k", "model": "paid/default"}}})
+            payload = {"data": [{"id": "free/scientific", "pricing": {"prompt": "0e-6", "completion": 0}}]}
+            class JsonResponse(Response):
+                def read(self): return json.dumps(payload).encode()
+            with patch("urllib.request.urlopen", return_value=JsonResponse()):
+                self.assertEqual(ProviderRegistry(path).list_models("openrouter", only_free=True), ["free/scientific"])
     def test_groq_catalog_uses_current_production_model(self):
         with tempfile.TemporaryDirectory() as raw:
             prov = ProviderRegistry(Path(raw) / "providers.json").configure("groq", "gsk_test")
