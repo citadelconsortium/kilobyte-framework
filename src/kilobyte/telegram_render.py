@@ -41,11 +41,24 @@ def telegram_html(text: str) -> str:
     rendered: list[str] = []
     code_lines: list[str] = []
     in_code = False
+    code_language = ""
     for raw_line in text.splitlines():
-        if raw_line.strip().startswith("```"):
+        fence = re.match(r"^\s*```([^\s`]*)", raw_line)
+        if fence is not None:
             if in_code:
-                rendered.append("<pre>" + html.escape("\n".join(code_lines)) + "</pre>")
+                language = re.sub(r"[^A-Za-z0-9_+.-]", "", code_language)[:32]
+                if language:
+                    rendered.append(
+                        f'<pre><code class="language-{language}">'
+                        + html.escape("\n".join(code_lines))
+                        + "</code></pre>"
+                    )
+                else:
+                    rendered.append("<pre>" + html.escape("\n".join(code_lines)) + "</pre>")
                 code_lines.clear()
+                code_language = ""
+            else:
+                code_language = fence.group(1)
             in_code = not in_code
             continue
         if in_code:
@@ -71,7 +84,15 @@ def telegram_html(text: str) -> str:
         else:
             rendered.append(_inline(raw_line))
     if in_code:
-        rendered.append("<pre>" + html.escape("\n".join(code_lines)) + "</pre>")
+        language = re.sub(r"[^A-Za-z0-9_+.-]", "", code_language)[:32]
+        if language:
+            rendered.append(
+                f'<pre><code class="language-{language}">'
+                + html.escape("\n".join(code_lines))
+                + "</code></pre>"
+            )
+        else:
+            rendered.append("<pre>" + html.escape("\n".join(code_lines)) + "</pre>")
     return "\n".join(rendered).strip()
 
 

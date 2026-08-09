@@ -1,10 +1,10 @@
 [project]
 name = "kilobyte"
-version = "1.13.4"
+version = "1.13.5"
 description = "Local-first terminal AI powered by one persistent GGUF brain"
 requires-python = ">=3.11"
 license = {text = "MIT"}
-dependencies = ["prompt_toolkit>=3.0"]
+dependencies = ["prompt_toolkit>=3.0", "Pygments>=2.15"]
 
 [project.scripts]
 kilo = "kilobyte.cli:main"

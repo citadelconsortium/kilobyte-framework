@@ -59,9 +59,10 @@ mode. Providers that do not advertise a limit are labelled `provider-managed`.
 Research-profile turns require successful `web_search` and `web_fetch` calls before an
 answer is accepted. Intermediate planning and promise text is reset from clients; repeated
 general non-performance is reported as failure instead of false completion.
-The full-screen TUI is restored byte-for-byte from the v1.13.0 framework release. Its
-original agent row, `◈` tool activity/results, faint divider, and answer share one Kilo
-border. Do not split it into live-work/answer boxes or add capability-manifest rows.
+The full-screen TUI preserves the v1.13.0 framework renderer: its original agent row, `◈`
+tool activity/results, faint divider, and answer share one Kilo border. Pygments styles only
+fenced-code content using the declared language. Do not split the turn into live-work/answer
+boxes or add capability-manifest rows.
 Cloud providers receive native tool schemas first, with a schema-bearing JSON text-tool
 fallback for models/endpoints that reject the native field. XML-function and JSON envelopes
 are still validated against the active interface allow-list before dispatch.
@@ -75,7 +76,7 @@ Past-chat selectors include local date/time. OpenRouter free-model discovery acc
 
 ## Verification and limits
 
-The full suite is 142 tests and passes. The Framework installer is intentionally
+The full suite is 144 tests and passes. The Framework installer is intentionally
 usable without `llama-server` for cloud-only operation. Local GGUF performance is
 bounded by the target machine; advanced coding/security work should use capable
 hardware or an explicitly selected cloud model. Keep the security profile and

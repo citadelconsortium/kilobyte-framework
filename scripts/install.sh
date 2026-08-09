@@ -41,7 +41,7 @@ KILO_GROUP="$(id -gn "$KILO_USER" 2>/dev/null || echo "$KILO_USER")"
 if command -v pacman >/dev/null; then
     # Arch only supports full upgrades. Keep llama-cpp and ggml on matching
     # versions instead of risking unresolved runtime symbols.
-    pacman -Syu --needed --noconfirm llama-cpp python python-prompt_toolkit curl sqlite ripgrep
+    pacman -Syu --needed --noconfirm llama-cpp python python-prompt_toolkit python-pygments curl sqlite ripgrep
 elif command -v apt-get >/dev/null; then
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip curl sqlite3 ripgrep
@@ -61,12 +61,12 @@ PYTHON_BIN="$(command -v python3 || command -v python || true)"
 if ! command -v llama-server >/dev/null; then
     echo "note: llama-server not found; install llama-cpp before using a local GGUF (cloud mode remains available)."
 fi
-# The TUI needs prompt_toolkit. Prefer the distro package (installed above); fall back to
-# pip so a non-Arch host still gets a working interface.
-if ! "$PYTHON_BIN" -c "import prompt_toolkit" 2>/dev/null; then
-    "$PYTHON_BIN" -m pip install --break-system-packages prompt_toolkit 2>/dev/null \
-        || "$PYTHON_BIN" -m pip install prompt_toolkit \
-        || echo "warning: prompt_toolkit missing; the TUI will use the simple fallback UI" >&2
+# The full TUI needs prompt_toolkit and uses Pygments for language-aware code output.
+# Prefer distro packages where installed above; use pip as the portable fallback.
+if ! "$PYTHON_BIN" -c "import prompt_toolkit, pygments" 2>/dev/null; then
+    "$PYTHON_BIN" -m pip install --break-system-packages prompt_toolkit pygments 2>/dev/null \
+        || "$PYTHON_BIN" -m pip install prompt_toolkit pygments \
+        || echo "warning: prompt_toolkit/Pygments missing; code output will use the simple fallback UI" >&2
 fi
 
 if ! id "$KILO_USER" >/dev/null 2>&1; then

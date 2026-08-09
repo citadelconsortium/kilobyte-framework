@@ -6,15 +6,30 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 try:
-    from kilobyte.tui_full import KiloApp
+    from prompt_toolkit.document import Document
+    from kilobyte.tui_full import KiloApp, _ChatLexer
 except ModuleNotFoundError as exc:
     if exc.name != "prompt_toolkit":
         raise
     KiloApp = None
+    Document = None
 
 
 @unittest.skipIf(KiloApp is None, "prompt_toolkit is not installed in the raw source-test environment")
 class FullTUIDirectChatTests(unittest.IsolatedAsyncioTestCase):
+    def test_python_fence_receives_language_aware_syntax_styles(self):
+        document = Document(
+            "\u2502 ```python                         \u2502\n"
+            "\u2502 def greet(name): return f'Hi {name}' \u2502\n"
+            "\u2502 ```                               \u2502"
+        )
+        fragments = _ChatLexer().lex_document(document)(1)
+        styles = {style for style, value in fragments if value.strip()}
+        self.assertIn("class:pygments.keyword", styles)
+        self.assertIn("class:pygments.name.function", styles)
+        self.assertTrue(any(style.startswith("class:pygments.literal.string") for style in styles))
+        self.assertEqual("".join(value for _style, value in fragments), document.lines[1])
+
     async def test_old_live_work_and_response_share_the_same_kilo_box(self):
         events = [
             {"type": "session", "session_id": "direct-chat"},

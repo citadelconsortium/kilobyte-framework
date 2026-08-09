@@ -37,6 +37,12 @@ class TelegramRenderTests(unittest.TestCase):
         self.assertIn("First\n\nSecond", rendered)
         self.assertIn("<pre>a\n\nb</pre>", rendered)
 
+    def test_language_fence_enables_telegram_syntax_highlighting(self):
+        rendered = telegram_html("```python\ndef greet():\n    return 'hi'\n```")
+        self.assertIn('<pre><code class="language-python">', rendered)
+        self.assertIn("def greet():", rendered)
+        self.assertTrue(rendered.endswith("</code></pre>"))
+
 
 if __name__ == "__main__":
     unittest.main()
