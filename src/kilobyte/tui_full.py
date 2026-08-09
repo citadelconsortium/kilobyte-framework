@@ -763,13 +763,24 @@ class KiloApp:
             if name in set(self._catalog.get("configured", [])) and not pending.get("force_key"):
                 self._run_cloud(name, pending.get("question"))
                 return
-            self._append(f"\n☁ paste your {name} API key and press Enter:\n")
-            self._pending = {"kind": "cloud_key", "name": name, "question": pending.get("question")}
+            if name == "cloudflare":
+                self._append("\n☁ enter your Cloudflare account ID:\n")
+                self._pending = {"kind": "cloud_account", "name": name, "question": pending.get("question")}
+            else:
+                self._append(f"\n☁ paste your {name} API key and press Enter:\n")
+                self._pending = {"kind": "cloud_key", "name": name, "question": pending.get("question")}
+            return
+        if kind == "cloud_account":
+            if not text.strip() or not text.strip().replace("-", "").isalnum():
+                self._append("\n⚠ invalid Cloudflare account ID\n")
+                return
+            self._append("\n☁ paste your Cloudflare API token and press Enter:\n")
+            self._pending = {"kind": "cloud_key", "name": "cloudflare", "account_id": text.strip(), "question": pending.get("question")}
             return
         if kind == "cloud_key":
             name = pending["name"]
             try:
-                res = await self.client.request("configure_provider", name=name, api_key=text)
+                res = await self.client.request("configure_provider", name=name, api_key=text, account_id=pending.get("account_id"))
             except (ConnectionError, FileNotFoundError, OSError) as exc:
                 self._append(f"\n⚠ could not save key: {exc}\n")
                 return
