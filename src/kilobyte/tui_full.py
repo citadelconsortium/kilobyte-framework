@@ -335,7 +335,7 @@ class KiloApp:
             [("class:tagline", "made by 0v3r51ght  ·  /help · F2 runtime · Ctrl-Q quit")],
         ]
         rows: list[tuple[str, str]] = []
-        show_mascot = self._cw() >= 90  # only when there is genuine free space
+        show_mascot = False  # banner intentionally stays mascot-free
         for i, art in enumerate(KILO_ART):
             rows += self._shimmer(art, i)
             line = info[i] if i < len(info) else []
