@@ -61,6 +61,7 @@ class TelegramBridge:
         ("new", "start a fresh conversation"),
         ("id", "show this chat's id"),
         ("help", "list commands"),
+        ("commands", "list commands"),
     )
 
     MENU = {
@@ -282,7 +283,7 @@ class TelegramBridge:
             ]
             await self.send(token, chat_id, "\n".join(lines), self.MENU)
             return True
-        if command == "help":
+        if command in {"help", "commands"}:
             lines = [
                 "<b>Commands</b>",
                 *[f"• <code>/{name}</code> — {description}" for name, description in self.COMMANDS],

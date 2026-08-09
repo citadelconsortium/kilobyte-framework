@@ -111,6 +111,7 @@ _COMMANDS = [
     ("/chats", "list past sessions to resume"),
     ("/kilochats", "browse past chats; type a number to continue one"),
     ("/cloud key", "add or change a provider API key"),
+    ("/botkey", "set or change the Telegram bot token"),
     ("/cloud ", "set up or use a cloud model (provider picker)"),
     ("/switch", "flip between cloud and local Kilo (Kilo default)"),
     ("/model ", "change the cloud model"),
@@ -521,6 +522,7 @@ class KiloApp:
                 "  /chats · /kilochats       list past chats; type a number to continue one\n"
                 "  /chat <n>                 open a past session by number\n"
                 "  /cloud [question]         set up / use a cloud model (key selector)\n"
+                "  /botkey [token]          set or change the Telegram bot token\n"
                 "  /switch                   flip between cloud and local Kilo (Kilo default)\n"
                 "  /private [on|off|rotate]  mask web via Tor — hide IP, rotate exit\n"
                 "  /model [name]             show or change the cloud model\n"
@@ -531,6 +533,17 @@ class KiloApp:
             return True
         if text == "/chats":
             self._spawn(self._list_chats())
+            return True
+        if text == "/commands":
+            self._append("\ncommands:\n" + "\n".join(f"  {name:<18} {description}" for name, description in _COMMANDS) + "\n")
+            return True
+        if text.startswith("/botkey"):
+            token = text[len("/botkey"):].strip()
+            if token:
+                self._spawn(self._set_botkey(token))
+            else:
+                self._append("\n🔐 paste the Telegram bot token and press Enter (it will not be echoed back):\n")
+                self._pending = {"kind": "telegram_key"}
             return True
         if text in ("/kilochats", "/kchats"):
             self._spawn(self._kilochats())
@@ -764,6 +777,20 @@ class KiloApp:
                 return
             self._append(f"\n✓ {res.get('label', name)} configured.\n")
             self._run_cloud(name, pending.get("question"))
+            return
+        if kind == "telegram_key":
+            await self._set_botkey(text.strip())
+
+    async def _set_botkey(self, token: str) -> None:
+        try:
+            res = await self.client.request("set_telegram_token", token=token)
+        except (ConnectionError, FileNotFoundError, OSError) as exc:
+            self._append(f"\n⚠ could not save Telegram bot token: {exc}\n")
+            return
+        if not res.get("ok"):
+            self._append(f"\n⚠ {res.get('error', 'invalid Telegram bot token')}\n")
+            return
+        self._append("\n✓ Telegram bot token saved securely. Restart or wait for the bridge to reload it.\n")
 
     async def _rotate_circuit(self) -> None:
         try:
