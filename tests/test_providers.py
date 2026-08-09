@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from kilobyte.providers import ProviderError, ProviderRegistry, _model_ids
@@ -80,6 +81,17 @@ if __name__ == "__main__":
 
 
 class ProviderConfigureTests(unittest.TestCase):
+    def test_openrouter_zero_priced_models_are_free(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+        with tempfile.TemporaryDirectory() as raw:
+            path = _config(raw, {"providers": {"openrouter": {"api_key": "k", "model": "x"}}})
+            payload = {"data": [{"id": "free/model", "pricing": {"prompt": "0", "completion": "0"}}, {"id": "paid/model", "pricing": {"prompt": "1", "completion": "1"}}]}
+            class JsonResponse(Response):
+                def read(self): return json.dumps(payload).encode()
+            with patch("urllib.request.urlopen", return_value=JsonResponse()):
+                self.assertEqual(ProviderRegistry(path).list_models("openrouter", only_free=True), ["free/model"])
     def test_groq_catalog_uses_current_production_model(self):
         with tempfile.TemporaryDirectory() as raw:
             prov = ProviderRegistry(Path(raw) / "providers.json").configure("groq", "gsk_test")

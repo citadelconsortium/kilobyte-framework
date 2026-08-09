@@ -201,6 +201,14 @@ class ProviderRegistry:
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = json.load(r)
             ids = _model_ids(data)
+            free_ids = []
+            if "openrouter" in prov.base_url:
+                for item in data.get("data") or []:
+                    if not isinstance(item, dict): continue
+                    ident = item.get("id")
+                    pricing = item.get("pricing") or {}
+                    if ident and (str(ident).endswith(":free") or (str(pricing.get("prompt", "")) in {"0", "0.0", "0.000000"} and str(pricing.get("completion", "")) in {"0", "0.0", "0.000000"})):
+                        free_ids.append(str(ident))
             for item in (data.get("data") or data.get("models") or data.get("result") or []):
                 if not isinstance(item, dict):
                     continue
@@ -219,7 +227,7 @@ class ProviderRegistry:
         if prov.model not in ids:
             ids.insert(0, prov.model)
         if only_free and "openrouter" in prov.base_url:
-            free = sorted(i for i in ids if str(i).endswith(":free"))
+            free = sorted(set(free_ids or [i for i in ids if str(i).endswith(":free")]))
             if free:
                 return free
         return sorted(ids)
