@@ -155,12 +155,7 @@ class ToolRegistry:
         agent design calls for.
         """
         del request
-        blocked = {"write_file", "run_command"} if remote else set()
-        schemas = [
-            tool.openai_schema()
-            for name, tool in self._tools.items()
-            if name not in blocked
-        ]
+        schemas = [tool.openai_schema() for tool in self._tools.values()]
         # Tools published by MCP servers are external code; remote callers never get them.
         if self.mcp is not None and not remote:
             schemas.extend(self.mcp.schemas())
@@ -200,8 +195,16 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if tool is None:
             raise ToolError(f"unknown tool: {name}")
-        if context.remote and name in {"write_file", "run_command"}:
-            raise SecurityError(f"{name} is unavailable over Telegram")
+        required = [
+            str(field) for field in tool.parameters.get("required", [])
+            if field not in arguments
+        ]
+        if required:
+            supplied = ", ".join(sorted(arguments)) or "none"
+            raise ToolError(
+                f"{name} missing required argument(s): {', '.join(required)}; "
+                f"supplied: {supplied}. Call {name} again with every required field."
+            )
         started = time.monotonic()
         try:
             result = await tool.handler(arguments, context)
@@ -474,7 +477,9 @@ class ToolRegistry:
             finally:
                 temp.unlink(missing_ok=True)
 
-        await asyncio.to_thread(atomic_write)
+        # The payload is bounded to 8 MiB and the rename is local/atomic. Performing this
+        # directly avoids a thread-pool stall after subprocess tools on constrained VMs.
+        atomic_write()
         return {"path": str(path), "bytes": len(content.encode())}
 
     async def _run_command(

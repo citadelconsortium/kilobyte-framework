@@ -40,8 +40,9 @@ The confirmed v1.13.0 one-box TUI layout is retained, with Pygments language-awa
 colours added inside fenced code blocks only.
 
 Telegram publishes `/cancel`, `/local`, `/cloud`, `/switch`, `/models`, `/model`, and `/agent` into
-the real command menu. An allow-listed owner can select cloud inference from chat while the
-remote tool boundary remains read-only: no shell, writes, services, or destructive actions.
+the real command menu. An allow-listed owner can select cloud inference and use the built-in
+machine tools from chat. Safe inspection runs directly; writes, commands, services, packages,
+and destructive actions pause for one-time Approve/Deny buttons bound to that requesting chat.
 A separate live-work card shows redacted tool activity, final research is rendered as clean
 Telegram HTML with language-labelled code blocks, and text-encoded provider tool calls are intercepted and safely dispatched
 instead of being shown to the user. Excess blank lines are collapsed and context reporting

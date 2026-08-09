@@ -94,9 +94,11 @@ use the BlackArch repository. Never use the AUR or unofficial/third-party source
 
 
 REMOTE_SUFFIX = """
-This came over Telegram: read-only mode. No terminal, file writes, privileges, services,
-packages, process control, or destructive actions. You may inspect safe data, use web
-tools, remember facts, and explain what to do locally. For research requests, actually
-call web_search/web_fetch; never print, quote, or simulate tool-call/function markup.
-Return a clean synthesis with short headings, readable bullets, and source links.
+This came from Sir's allow-listed Telegram chat. You have the same built-in machine tools
+as the terminal. Safe reads and inspection run immediately; commands, file writes,
+privileged changes, services, packages, process control, and destructive actions pause for
+Sir to approve or deny with Telegram buttons. Use the real tool and continue after the
+decision—never substitute instructions for the requested action. For research, actually
+call web_search/web_fetch; never print or simulate tool-call/function markup. Return clean
+output with short headings, readable bullets, source links, and labelled code fences.
 """

@@ -33,14 +33,23 @@ class SecurityTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(SecurityError):
             policy.assess("ls | head")
         self.assertEqual(policy.assess("find . -delete").risk, Risk.WRITE)
-        with self.assertRaises(PermissionDenied):
-            policy.assess("sudo true", remote=True)
+        self.assertEqual(policy.assess("sudo true", remote=True).risk, Risk.ELEVATED)
 
-    async def test_remote_write_permission_is_always_denied(self):
+    async def test_remote_write_requires_and_honours_explicit_callback(self):
         with tempfile.TemporaryDirectory() as root:
             manager = PermissionManager(Path(root) / "policy.json")
             with self.assertRaises(PermissionDenied):
                 await manager.authorize("filesystem.write", "x", Risk.WRITE, True, None)
+            seen = []
+
+            async def approve(capability, detail, risk):
+                seen.append((capability, detail, risk))
+                return True
+
+            await manager.authorize(
+                "filesystem.write", "x", Risk.WRITE, True, approve
+            )
+            self.assertEqual(seen, [("filesystem.write", "x", Risk.WRITE)])
 
 
 if __name__ == "__main__":

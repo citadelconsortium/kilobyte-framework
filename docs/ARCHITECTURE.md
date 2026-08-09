@@ -49,7 +49,7 @@ reports it rather than silently sending the prompt elsewhere.
 | `memory.py` | Bounded SQLite sessions, messages, facts, audit |
 | `resources.py` | Hardware detection and runtime tuning |
 | `security.py` | Path policy, command policy, permission manager |
-| `telegram.py` | Optional remote front end, read-only policy |
+| `telegram.py` | Allow-listed remote front end with chat-bound action approvals |
 | `mcp.py` | MCP client (stdio), external server lifecycle and tool namespacing |
 | `providers.py` | Optional hosted brains, used only on explicit escalation |
 | `brains.py` | Brain lifecycle: candidate → current → previous, with rollback |
@@ -136,8 +136,8 @@ applies only to a message the operator marked, it never triggers automatically o
 local failure, the answering brain is reported in a `brain` event so the interface can
 label it, and with no providers file there is no cloud path at all. Keys are read from a
 `0600` file, sent in a header over HTTPS only, and never logged or placed on a command
-line. An allow-listed Telegram owner can explicitly choose `/cloud`; the remote tool schema
-remains read-only regardless of which brain answers.
+line. An allow-listed Telegram owner can explicitly choose `/cloud`; local and cloud brains
+receive the same built-in tools and non-safe actions wait for a chat-bound approval callback.
 
 ## Security model
 
@@ -146,8 +146,9 @@ remains read-only regardless of which brain answers.
 - Commands are classified `safe` / `write` / `elevated` / `destructive`. Unknown programs,
   interpreters, active network/security tools, and commands that can alter external state
   are not treated as safe. Each non-safe class has a separate session approval capability.
-- Remote (Telegram) requests are read-only: no terminal, writes, privileges, services,
-  packages or process control, enforced in both the schema and the executor.
+- Remote (Telegram) messages are accepted only from configured chat IDs. Safe operations run
+  directly; every non-safe operation requires an unexpired one-time decision from that same
+  chat. With no callback or on timeout, the executor denies the action.
 - Web fetches resolve DNS and refuse non-global addresses, so the model cannot reach
   private network services.
 - Output, runtime and file sizes are bounded. Every tool call is audited to SQLite.
