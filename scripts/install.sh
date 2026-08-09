@@ -12,7 +12,7 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
 if [[ -z "$ROOT" || ! -f "$ROOT/src/kilobyte/__init__.py" ]]; then
     if ! command -v git >/dev/null; then
-        command -v pacman >/dev/null && pacman -S --needed --noconfirm git             || { command -v apt-get >/dev/null && apt-get update && apt-get install -y git; }
+        command -v pacman >/dev/null && pacman -Syu --needed --noconfirm git             || { command -v apt-get >/dev/null && apt-get update && apt-get install -y git; }
     fi
     DEST="/opt/kilobyte-framework"
     rm -rf "$DEST"
@@ -26,8 +26,9 @@ KILO_USER="${KILOBYTE_USER:-kilobyte}"
 KILO_GROUP="$(id -gn "$KILO_USER" 2>/dev/null || echo "$KILO_USER")"
 
 if command -v pacman >/dev/null; then
-    # python-prompt_toolkit backs the full-screen terminal UI; the rest are the runtime.
-    pacman -S --needed --noconfirm llama-cpp python python-prompt_toolkit curl sqlite ripgrep
+    # Arch only supports full upgrades. Keep llama-cpp and ggml on matching
+    # versions instead of risking unresolved runtime symbols.
+    pacman -Syu --needed --noconfirm llama-cpp python python-prompt_toolkit curl sqlite ripgrep
 fi
 command -v python >/dev/null
 # The framework is deliberately brain-free: cloud mode works without a local
