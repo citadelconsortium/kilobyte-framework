@@ -101,6 +101,13 @@ class MemoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a chat and all its messages. Returns True if the session existed."""
+        with self._lock, self._db:
+            messages = self._db.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+            session = self._db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+        return bool((session.rowcount or 0) or (messages.rowcount or 0))
+
     def search_messages(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
         """Find past conversation lines across all sessions, so Kilo can recall something
         said in an earlier chat, not just the current one."""

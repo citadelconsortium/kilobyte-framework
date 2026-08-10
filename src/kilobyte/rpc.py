@@ -91,6 +91,12 @@ class RPCServer:
                         "data": {"sessions": self.memory.list_sessions()},
                     },
                 )
+            elif command == "delete_session":
+                sid = str(request.get("session_id", ""))
+                await self._send(
+                    writer,
+                    {"type": "result", "data": {"deleted": self.memory.delete_session(sid)}},
+                )
             elif command == "session_history":
                 sid = str(request.get("session_id", ""))
                 await self._send(

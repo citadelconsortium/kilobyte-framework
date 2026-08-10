@@ -151,6 +151,7 @@ _COMMANDS = [
     ("/switch", "flip between cloud and local Kilo (Kilo default)"),
     ("/model ", "change the cloud model"),
     ("/chat ", "open a past chat by number"),
+    ("/delete ", "delete chats you choose (n, n,m, or all)"),
     ("/kchats", "browse past chats (alias for /kilochats)"),
     ("/gguf", "browse downloaded .gguf files and load one as the brain"),
     ("/private ", "on | off | rotate — mask web through Tor"),
@@ -609,6 +610,7 @@ class KiloApp:
                 "  /agent <name>|off         force research|coding|security|math|engineering|systems, or auto\n"
                 "  /chats · /kilochats       list past chats; type a number to continue one\n"
                 "  /chat <n>                 open a past session by number\n"
+                "  /delete [n|n,m|all]       delete chats you choose (lists them if no number)\n"
                 "  /cloud [question]         set up / use a cloud model (key selector)\n"
                 "  /botkey [token]          set or change the Telegram bot token\n"
                 "  /switch                   flip between cloud and local Kilo (Kilo default)\n"
@@ -635,6 +637,12 @@ class KiloApp:
             return True
         if text in ("/kilochats", "/kchats"):
             self._spawn(self._kilochats())
+            return True
+        if text == "/delete":
+            self._spawn(self._delete_chats())
+            return True
+        if text.startswith("/delete "):
+            self._spawn(self._delete_pick(text.split(maxsplit=1)[1].strip()))
             return True
         if text.startswith("/chat "):
             self._spawn(self._open_chat(text.split(maxsplit=1)[1].strip()))
@@ -782,6 +790,54 @@ class KiloApp:
             self._append(f"\n{_you(m['content']) if m['role']=='user' else m['content']}\n")
         self._append("\n— continue below —\n")
 
+    async def _delete_chats(self) -> None:
+        """List past chats and arm a delete selector: the next number(s) typed are removed."""
+        await self._list_chats()
+        if self._sessions:
+            self._append(
+                "  → type the number(s) to DELETE (e.g. 2 or 1,3,4), 'all' to wipe every "
+                "chat, or anything else to cancel:\n"
+            )
+            self._pending = {"kind": "chat_delete"}
+
+    async def _delete_pick(self, arg: str) -> None:
+        """Delete chats chosen by number from the last listing (or 'all')."""
+        if not self._sessions:
+            await self._list_chats()
+        await self._do_delete(arg)
+
+    async def _do_delete(self, arg: str) -> None:
+        arg = arg.strip().lower()
+        sessions = list(self._sessions)
+        if not sessions:
+            self._append("\n— no chats to delete; run /chats first —\n")
+            return
+        if arg in {"all", "*", "everything"}:
+            targets = list(sessions)
+        else:
+            picked: list[dict[str, Any]] = []
+            for part in arg.replace(",", " ").split():
+                if part.isdigit() and 1 <= int(part) <= len(sessions):
+                    picked.append(sessions[int(part) - 1])
+            if not picked:
+                self._append("\n— nothing deleted (no valid chat number given) —\n")
+                return
+            seen: set[str] = set()
+            targets = [s for s in picked if not (s["id"] in seen or seen.add(s["id"]))]
+        removed = 0
+        for session in targets:
+            try:
+                data = await self.client.request("delete_session", session_id=session["id"])
+            except (ConnectionError, FileNotFoundError, OSError) as exc:
+                self._append(f"\n⚠ could not delete a chat: {exc}\n")
+                continue
+            if data.get("deleted"):
+                removed += 1
+                if session["id"] == self.session_id:
+                    self.session_id = None
+        self._append(f"\n\U0001f5d1  deleted {removed} chat{'s' if removed != 1 else ''}.\n")
+        await self._list_chats()
+
     async def _cloud_setup(self, pending_question: str | None = None, force_key: bool = False) -> None:
         """Show the provider catalog and await a pick. Users only ever supply an API key:
         the base URL and default model come from the catalog."""
@@ -830,6 +886,13 @@ class KiloApp:
                 await self._open_chat(text.strip())
             else:
                 self._append("— stayed in the current chat —\n")
+            return
+        if kind == "chat_delete":
+            stripped = text.strip().lower()
+            if stripped in {"all", "*", "everything"} or any(c.isdigit() for c in stripped):
+                await self._do_delete(text)
+            else:
+                self._append("— cancelled; no chats deleted —\n")
             return
         if kind == "model_pick":
             name = None
@@ -1087,9 +1150,14 @@ class KiloApp:
                 elif kind == "token":
                     self._open_box()
                     if self._had_work and not self._work_split:
-                        # a faint divider separates the work section from the reply
+                        # A clear labelled rule closes the work section (escalation,
+                        # orchestrator hand-off, tool output) and opens Kilo's reply, so the
+                        # two never blur together inside his box.
                         self._flush_boxed()
-                        self._bline("\u2508" * max(4, self._cw() - 4))
+                        self._bline("")
+                        inner = max(10, self._cw() - 4)
+                        label = "\u2500\u2500 reply "
+                        self._bline(label + "\u2500" * max(0, inner - len(label)))
                         self._work_split = True
                     self.streaming = True
                     self.tokens += 1
