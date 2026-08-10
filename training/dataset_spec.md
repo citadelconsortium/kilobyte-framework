@@ -31,7 +31,7 @@ Rules the builder enforces:
 - A `tool` message must follow an assistant turn that called that tool, and its `content` is the tool's JSON result.
 - No assistant turn claims a tool succeeded before a `tool` result confirming it appears.
 - `domain` is one of the domains below.
-- `arguments` reference only tools Kilo actually exposes: `read_file`, `write_file`, `list_files`, `search_files`, `run_command`, `system_info`, `web_search`, `web_fetch`, `remember`, `recall`, `save_skill`, `list_skills`, or namespaced `mcp__server__tool`.
+- `arguments` reference only tools Kilo actually exposes: `read_file`, `write_file`, `list_files`, `search_files`, `run_command`, `system_info`, `web_search`, `web_fetch`, `reference`, `remember`, `recall`, `search_history`, `save_skill`, `list_skills`, or namespaced `mcp__server__tool`.
 
 ## Domain distribution (starting point)
 

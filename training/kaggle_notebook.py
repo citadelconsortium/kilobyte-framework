@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""Kilobyte training notebook — runs on a Kaggle GPU session, fully offline.
+"""Kilobyte training notebook — runs on a Kaggle GPU session.
 
-Kaggle notebooks have no internet unless the account is phone-verified, so this pipeline
-does not rely on it: the base model is attached as a Kaggle model input, and it uses only
-packages present on Kaggle's GPU image (torch, transformers, peft, datasets). A 1.5B model
-fine-tunes comfortably in bf16 with a LoRA adapter, so no 4-bit/bitsandbytes or Unsloth is
-needed.
+The model may be attached as a Kaggle model input or downloaded from its official model
+repository when notebook internet is enabled. A LoRA adapter keeps the 3B run within a
+single Kaggle GPU while preserving the base model's general reasoning.
 
 GGUF conversion is deliberately not done here — it needs llama.cpp, which needs internet
 to fetch. This notebook outputs the merged Hugging Face weights; conversion to
 kilobyte.gguf happens afterward on a machine that has llama.cpp (see convert_gguf.sh).
 
 Inputs on Kaggle:
-    /kaggle/input/qwen2.5/transformers/1.5b-instruct/1   base model (attached)
+    ibm-granite/granite-4.1-3b                           official base (downloaded or attached)
     /kaggle/input/kilobyte-sft/kilobyte-sft.jsonl        dataset (attached)
     /kaggle/input/kilobyte-sft/config.json               config (bundled)
 Outputs:
@@ -51,11 +49,7 @@ def resolve_base_model(config: dict) -> str:
     the exact version subdirectory is globbed so a version bump does not break the path."""
     if not on_kaggle():
         return config.get("local_base_model", config["base_model"])
-    for pattern in (
-        "/kaggle/input/qwen2.5/transformers/1.5b-instruct/*",
-        "/kaggle/input/*/transformers/1.5b-instruct/*",
-        "/kaggle/input/*/**/config.json",
-    ):
+    for pattern in ("/kaggle/input/*/**/config.json",):
         hits = sorted(glob.glob(pattern, recursive=True))
         for hit in hits:
             path = Path(hit)
@@ -63,7 +57,8 @@ def resolve_base_model(config: dict) -> str:
             if (root / "config.json").is_file() and any(root.glob("*.safetensors")):
                 log(f"using attached base model at {root}")
                 return str(root)
-    raise SystemExit("attached base model not found under /kaggle/input; attach qwen-lm/qwen2.5/transformers/1.5b-instruct")
+    log(f"no attached model found; downloading official base {config['base_model']}")
+    return config["base_model"]
 
 
 def resolve_paths(config: dict) -> tuple[Path, Path]:
@@ -78,23 +73,46 @@ def resolve_paths(config: dict) -> tuple[Path, Path]:
     return data_dir, out_dir
 
 
+TOOL_SCHEMAS = [
+    {"type": "function", "function": {"name": "read_file", "description": "Read a text file.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "write_file", "description": "Write text to a file.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
+    {"type": "function", "function": {"name": "list_files", "description": "List a directory.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "search_files", "description": "Search files for text.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "path": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "run_command", "description": "Run a command on the local machine.", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
+    {"type": "function", "function": {"name": "system_info", "description": "Inspect live system resources and platform details.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "web_search", "description": "Search the web.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "web_fetch", "description": "Fetch a web page.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}}},
+    {"type": "function", "function": {"name": "reference", "description": "Look up Kilo's offline reference bank.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "remember", "description": "Store a durable fact.", "parameters": {"type": "object", "properties": {"content": {"type": "string"}, "importance": {"type": "number", "minimum": 0, "maximum": 1}}, "required": ["content"]}}},
+    {"type": "function", "function": {"name": "recall", "description": "Recall stored facts.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "search_history", "description": "Search past Kilo conversations.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "save_skill", "description": "Save a reusable procedure as a Kilo skill.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "when_to_use": {"type": "string"}, "steps": {"type": "string"}}, "required": ["name", "when_to_use", "steps"]}}},
+    {"type": "function", "function": {"name": "list_skills", "description": "List the reusable Kilo skills available to this assistant.", "parameters": {"type": "object", "properties": {}}}},
+]
+
+
 def _conversation_to_messages(conv: dict) -> list[dict]:
-    """Flatten a spec conversation into chat-template messages. Tool calls are folded into
-    the assistant text and tool results into a user turn, so the template renders cleanly
-    on tokenizers that only know system/user/assistant."""
+    """Convert the dataset spec to native OpenAI function-call messages."""
     messages = []
+    pending_ids: list[tuple[str, str]] = []
+    call_number = 0
     for message in conv["messages"]:
         role = message["role"]
         content = message.get("content", "")
         if role == "assistant" and message.get("tool_calls"):
-            calls = "\n".join(
-                json.dumps({"tool": c["name"], "arguments": c["arguments"]}, ensure_ascii=False)
-                for c in message["tool_calls"]
-            )
-            content = (content + "\n" + calls).strip()
+            converted = []
+            for call in message["tool_calls"]:
+                call_id = f"call_{call_number}"
+                call_number += 1
+                pending_ids.append((call_id, call["name"]))
+                converted.append({"id": call_id, "type": "function", "function": {"name": call["name"], "arguments": call["arguments"]}})
+            messages.append({"role": role, "content": content, "tool_calls": converted})
+            continue
         if role == "tool":
-            role, content = "user", f"[tool result] {content}"
-        messages.append({"role": role, "content": content})
+            call_id, called_name = pending_ids.pop(0) if pending_ids else (f"call_{call_number}", message.get("name", "tool"))
+            messages.append({"role": "tool", "name": message.get("name", called_name), "tool_call_id": call_id, "content": content})
+        else:
+            messages.append({"role": role, "content": content})
     return messages
 
 
@@ -108,14 +126,24 @@ def render_examples(path: Path, tokenizer, max_len: int) -> "list[dict]":
         if not line:
             continue
         conv = json.loads(line)
-        text = tokenizer.apply_chat_template(
-            _conversation_to_messages(conv), tokenize=False, add_generation_prompt=False,
-        )
-        ids = tokenizer(text, truncation=True, max_length=max_len)["input_ids"]
+        messages = _conversation_to_messages(conv)
+        template = tokenizer.chat_template or ""
+        template_args = {
+            "tools": TOOL_SCHEMAS, "tokenize": True, "add_generation_prompt": False,
+            "truncation": True, "max_length": max_len, "return_dict": True,
+        }
+        if "{% generation" in template:
+            template_args["return_assistant_tokens_mask"] = True
+        rendered = tokenizer.apply_chat_template(messages, **template_args)
+        ids = rendered["input_ids"]
+        if ids and isinstance(ids[0], list):
+            ids = ids[0]
+        mask = rendered.get("assistant_masks") or rendered.get("assistant_tokens_mask")
+        if mask and isinstance(mask[0], list):
+            mask = mask[0]
         if ids:
-            # Full-sequence supervised fine-tuning: labels mirror inputs. Effective for
-            # teaching identity, persona and tool-call format on a focused dataset.
-            rows.append({"input_ids": ids, "labels": list(ids)})
+            labels = [token if keep else -100 for token, keep in zip(ids, mask)] if mask and any(mask) else list(ids)
+            rows.append({"input_ids": list(ids), "labels": labels})
     return rows
 
 

@@ -19,10 +19,14 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-DOMAINS = {"coding", "tools", "linux", "security", "planning", "recovery", "general", "persona"}
+DOMAINS = {
+    "coding", "tools", "linux", "security", "planning", "recovery", "general",
+    "persona", "research", "reference", "followthrough",
+}
 KNOWN_TOOLS = {
     "read_file", "write_file", "list_files", "search_files", "run_command", "system_info",
-    "web_search", "web_fetch", "remember", "recall", "save_skill", "list_skills",
+    "web_search", "web_fetch", "reference", "remember", "recall", "search_history",
+    "save_skill", "list_skills",
 }
 
 

@@ -46,8 +46,37 @@ def looks_like_tool_call(text: str) -> bool:
     return bool(re.search(r"\b(run_command|read_file|search_files|system_info|list_files)\b", text))
 
 
+def calls_valid(name: str, *required: str):
+    def check(text: str) -> bool:
+        try:
+            calls = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        for call in calls if isinstance(calls, list) else []:
+            function = call.get("function") or {}
+            if function.get("name") != name:
+                continue
+            arguments = function.get("arguments") or {}
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    return False
+            return isinstance(arguments, dict) and all(key in arguments for key in required)
+        return False
+    return check
+
+
 def is_concise(text: str) -> bool:
     return len(text.split()) <= 60
+
+
+EVAL_TOOLS = [
+    {"type": "function", "function": {"name": "system_info", "description": "Inspect live system resources.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "remember", "description": "Store a durable fact.", "parameters": {"type": "object", "properties": {"content": {"type": "string"}, "importance": {"type": "number"}}, "required": ["content"]}}},
+    {"type": "function", "function": {"name": "save_skill", "description": "Save a reusable skill.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "when_to_use": {"type": "string"}, "steps": {"type": "string"}}, "required": ["name", "when_to_use", "steps"]}}},
+    {"type": "function", "function": {"name": "list_skills", "description": "List saved skills.", "parameters": {"type": "object", "properties": {}}}},
+]
 
 
 SUITE: list[Check] = [
@@ -55,7 +84,10 @@ SUITE: list[Check] = [
     Check("owner-address", 1.0, "Say good morning to me.", contains_any("Sir")),
     Check("conciseness", 1.0, "Say hello.", is_concise),
     Check("no-tool-when-unneeded", 1.0, "What is 2 + 2?", lambda t: "4" in t and not looks_like_tool_call(t)),
-    Check("tool-selection", 2.0, "Check how much free disk space this machine has using a tool.", looks_like_tool_call, critical=True),
+    Check("tool-selection", 2.0, "Check how much free disk space this machine has using a tool.", calls_valid("system_info"), critical=True),
+    Check("memory-tool", 2.0, "Remember that my build host is forge-seven. Use the appropriate tool.", calls_valid("remember", "content"), critical=True),
+    Check("save-skill-tool", 2.0, "Save a reusable skill named quick-health that runs uptime and df -h /. Use the appropriate tool.", calls_valid("save_skill", "name", "when_to_use", "steps"), critical=True),
+    Check("list-skills-tool", 1.5, "Use a tool to list my saved skills.", calls_valid("list_skills"), critical=True),
     Check("linux-reasoning", 1.5, "sshd is active and listening on 22 but I still cannot connect. What next?", contains_any("firewall", "network", "route", "nat", "port")),
     Check("security-reasoning", 1.5, "nmap shows port 8080 open with an unknown service. What is your first step?", contains_any("banner", "header", "http", "identify", "fingerprint")),
     Check("recovery", 1.5, "A command failed with 'permission denied'. What do you do?", contains_any("sudo", "root", "elevate", "permission")),
@@ -104,11 +136,15 @@ class Server:
                 self.proc.kill()
 
     def ask(self, prompt: str) -> str:
-        body = json.dumps({"messages": [{"role": "user", "content": prompt}], "max_tokens": 256, "temperature": 0.3}).encode()
+        body = json.dumps({"messages": [{"role": "user", "content": prompt}], "tools": EVAL_TOOLS, "tool_choice": "auto", "max_tokens": 256, "temperature": 0.3}).encode()
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=600) as r:
             data = json.load(r)
-        return data["choices"][0]["message"]["content"] or ""
+        message = data["choices"][0]["message"]
+        calls = message.get("tool_calls") or []
+        if calls:
+            return json.dumps(calls, ensure_ascii=False)
+        return message.get("content") or ""
 
 
 def evaluate(model: Path, binary: str) -> Result:

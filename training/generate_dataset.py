@@ -124,6 +124,14 @@ TOOLS_DIRECT = [
     ("search the codebase for TODO", "search_files", {"query": "TODO", "path": "."}, "{\"matches\":\"app.py:12: # TODO: handle empty input\"}", "One TODO, Sir — app.py line 12, about handling empty input."),
     ("read the readme", "read_file", {"path": "README.md"}, "{\"content\":\"# Acme\\nA tool for X.\"}", "It's the Acme project, Sir — a tool for X. Want the details on any section?"),
     ("how much disk is free", "system_info", {}, "{\"disk\":{\"free\":21474836480}}", "About 20 GiB free, Sir."),
+    ("remember that the staging host is atlas", "remember", {"content": "The staging host is atlas.", "importance": 0.8}, "{\"remembered\":true,\"id\":1}", "Remembered, Sir: the staging host is atlas."),
+    ("what did I call the staging host", "recall", {"query": "staging host"}, "{\"facts\":[\"The staging host is atlas.\"]}", "You called the staging host atlas, Sir."),
+    ("save a skill called quick-health that checks uptime and disk", "save_skill", {"name": "quick-health", "when_to_use": "when checking basic host health", "steps": "Run uptime, then df -h /, and report load and free disk."}, "{\"saved\":true,\"name\":\"quick-health\"}", "Saved the quick-health skill, Sir."),
+    ("create notes.txt containing deployment ready", "write_file", {"path": "notes.txt", "content": "deployment ready\n"}, "{\"written\":true,\"path\":\"notes.txt\",\"bytes\":17}", "Created notes.txt and wrote the requested text, Sir."),
+    ("save this JSON to api-response.json: {\"ok\": true}", "write_file", {"path": "api-response.json", "content": "{\"ok\": true}\n"}, "{\"written\":true,\"path\":\"api-response.json\",\"bytes\":13}", "Saved the JSON to api-response.json, Sir."),
+    ("write a Python hello-world file named hello.py", "write_file", {"path": "hello.py", "content": "print('hello')\n"}, "{\"written\":true,\"path\":\"hello.py\",\"bytes\":15}", "Created hello.py, Sir."),
+    ("search our past chats for the database migration", "search_history", {"query": "database migration"}, "{\"matches\":[{\"role\":\"assistant\",\"content\":\"The migration passed.\"}]}", "I found the earlier result, Sir: the migration passed."),
+    ("show my saved skills", "list_skills", {}, "{\"skills\":[\"quick-health\"]}", "The quick-health skill is available, Sir."),
 ]
 
 # research: web_search -> web_fetch -> grounded, cited answer
@@ -153,6 +161,26 @@ def build(rng: random.Random, count: int) -> list[dict]:
 
     def add(domain: str, messages: list[dict]) -> None:
         nonlocal n
+        prompt_forms = (
+            "{}", "Kilo, {}", "Please {}", "Can you {}", "I need you to {}",
+            "Go ahead and {}", "Take care of this: {}", "Handle this for me: {}",
+        )
+        opener_forms = (
+            "On it, Sir.", "Checking now, Sir.", "Right away, Sir.",
+            "Understood, Sir.", "I'll inspect it, Sir.", "Working on it, Sir.",
+            "Starting with the evidence, Sir.", "I'll handle that, Sir.",
+        )
+        variant = n // 13
+        messages = [dict(message) for message in messages]
+        for message in messages:
+            if message.get("role") == "user":
+                original = str(message.get("content", ""))
+                message["content"] = prompt_forms[variant % len(prompt_forms)].format(original)
+                break
+        for message in messages:
+            if message.get("role") == "assistant" and message.get("tool_calls"):
+                message["content"] = opener_forms[(variant // len(prompt_forms)) % len(opener_forms)]
+                break
         out.append({"id": f"gen-{domain}-{n:05d}", "domain": domain, "messages": messages})
         n += 1
 
@@ -198,7 +226,7 @@ def build(rng: random.Random, count: int) -> list[dict]:
         lambda: followthrough(),
     ]
     while n < count:
-        rng.choice(builders)()
+        builders[n % len(builders)]()
     return out
 
 

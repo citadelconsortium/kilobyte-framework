@@ -16,16 +16,19 @@ Output:
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.request
 
 WORK = "/kaggle/working"
 LLAMA = f"{WORK}/llama.cpp"
+LLAMA_REF = "69bf6437914596fbbc4caf09a7ac16f2acdd1a94"
 F16 = f"{WORK}/kilobyte-f16.gguf"
-OUT = f"{WORK}/kilobyte.gguf"
+OUT = f"{WORK}/kilobyte-4.1-3b-q4_k_m.gguf"
 
 
 def run(cmd: str, **kw) -> int:
@@ -87,7 +90,9 @@ def main() -> int:
     for w in glob.glob(os.path.join(merged, "*.safetensors")):
         print(f"  weight {os.path.getsize(w) / 1e9:.2f} GB  {os.path.basename(w)}", flush=True)
 
-    run(f"git clone --depth 1 https://github.com/ggml-org/llama.cpp {LLAMA}")
+    os.makedirs(LLAMA, exist_ok=True)
+    if run(f"git -C {LLAMA} init") != 0 or run(f"git -C {LLAMA} fetch --depth 1 https://github.com/ggml-org/llama.cpp {LLAMA_REF}") != 0 or run(f"git -C {LLAMA} checkout --detach FETCH_HEAD") != 0:
+        raise SystemExit("could not fetch pinned llama.cpp converter")
     run("pip install -q gguf sentencepiece protobuf")
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{LLAMA}/gguf-py:" + env.get("PYTHONPATH", "")
@@ -96,9 +101,18 @@ def main() -> int:
         raise SystemExit("convert_hf_to_gguf.py failed")
     print(f"f16 GGUF: {os.path.getsize(F16) / 1e9:.2f} GB", flush=True)
 
-    if prebuilt_quantize(F16, OUT) or source_quantize(F16, OUT):
+    # Use the quantiser built from the same pinned source as the converter.
+    if source_quantize(F16, OUT):
         os.remove(F16)
-        print(f"GGUF READY (Q4_K_M): {os.path.getsize(OUT) / 1e9:.2f} GB", flush=True)
+        digest = hashlib.sha256()
+        with open(OUT, "rb") as handle:
+            for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+                digest.update(chunk)
+        manifest = {"artifact": os.path.basename(OUT), "base_model": "ibm-granite/granite-4.1-3b", "parameters": "3B", "quantization": "Q4_K_M", "format": "GGUF", "bytes": os.path.getsize(OUT), "sha256": digest.hexdigest(), "llama_cpp_ref": LLAMA_REF}
+        with open(f"{WORK}/conversion-manifest.json", "w") as handle:
+            json.dump(manifest, handle, indent=2)
+        shutil.rmtree(LLAMA, ignore_errors=True)
+        print(f"GGUF READY (Q4_K_M): {os.path.getsize(OUT) / 1e9:.2f} GB sha256={digest.hexdigest()}", flush=True)
     else:
         print("quantiser failed — leaving f16 GGUF for downstream quantisation", flush=True)
     return 0

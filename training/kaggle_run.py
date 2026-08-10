@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -103,8 +104,15 @@ def push_notebook(api, config: dict, dataset_ref: str) -> str:
             "kernel_sources": [],
         }
         (staging / "kernel-metadata.json").write_text(json.dumps(metadata, indent=2))
-        api.kernels_push(str(staging))
-        print(f"pushed notebook {ref} (GPU={metadata['enable_gpu']})")
+        accelerator = str(config["kaggle"].get("accelerator") or "").strip()
+        if accelerator:
+            cli = Path(sys.executable).with_name("kaggle")
+            if not cli.is_file():
+                raise SystemExit(f"Kaggle CLI not found beside {sys.executable}; cannot select {accelerator}")
+            subprocess.run([str(cli), "kernels", "push", "--path", str(staging), "--accelerator", accelerator], check=True)
+        else:
+            api.kernels_push(str(staging))
+        print(f"pushed notebook {ref} (GPU={metadata['enable_gpu']}, accelerator={accelerator or 'Kaggle default'})")
     return ref
 
 
