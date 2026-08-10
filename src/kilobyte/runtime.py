@@ -12,7 +12,7 @@ import urllib.request
 from collections.abc import AsyncIterator
 from typing import Any
 
-from .config import Settings
+from .config import LEGACY_MODEL_FILENAME, MODEL_FILENAME, Settings
 from .errors import ModelUnavailable, RuntimeUnavailable
 from .resources import ResourceManager, ResourceProfile
 
@@ -260,6 +260,28 @@ class LlamaRuntime:
         finally:
             response.close()
 
+    def _brain_label(self) -> str:
+        """The brain's real, descriptive name for display.
+
+        A promoted brain is stored under the canonical slot name current/kilobyte.gguf,
+        so the raw path reads as the generic "kilobyte.gguf". Show the descriptive brain
+        filename (e.g. kilobyte-4.1-3b-q4_k_m.gguf) instead, in both `kilo status` and the
+        TUI banner."""
+        path = self.settings.model_path
+        if path.name == LEGACY_MODEL_FILENAME or path.parent.name == "current":
+            return MODEL_FILENAME
+        return path.name
+
+    def _brain_version(self) -> str | None:
+        try:
+            meta = json.loads(
+                (self.settings.data_dir / "models" / "current" / "brain.json").read_text()
+            )
+            version = meta.get("brain_version")
+            return str(version) if version else None
+        except (OSError, json.JSONDecodeError):
+            return None
+
     def status(self) -> dict[str, Any]:
         running = bool(self.process and self.process.returncode is None)
         # Context/threads describe the running server and must remain the values selected
@@ -278,7 +300,8 @@ class LlamaRuntime:
             "pid": self.process.pid if running and self.process else None,
             "healthy": None,
             "uptime_seconds": int(time.monotonic() - self.started_at) if running and self.started_at else 0,
-            "model": str(self.settings.model_path),
+            "model": self._brain_label(),
+            "brain_version": self._brain_version(),
             "warming": self.warming,
             "profile": profile,
         }

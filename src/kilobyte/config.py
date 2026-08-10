@@ -9,6 +9,7 @@ from typing import Any
 
 
 MODEL_FILENAME = "model.gguf"
+LEGACY_MODEL_FILENAME = "kilobyte.gguf"  # promoted brains use the canonical slot name
 MODEL_URL = ""  # no bundled brain — bring your own GGUF (see /gguf in the TUI)
 MODEL_SHA256 = ""  # unset: this framework ships without a brain
 MODEL_REPOSITORY = "bring-your-own GGUF"

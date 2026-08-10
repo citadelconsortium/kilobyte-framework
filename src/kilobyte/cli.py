@@ -57,6 +57,9 @@ def print_status(status: dict[str, Any] | None) -> None:
     profile = status.get("profile") or {}
     memory = status.get("memory") or {}
     model = Path(str(status.get("model") or "unknown")).name
+    brain_version = status.get("brain_version")
+    if brain_version:
+        model = f"{model}  (brain {brain_version})"
     cache = "WARMING" if status.get("warming") else "READY"
     cache_color = YELLOW if status.get("warming") else GREEN
 

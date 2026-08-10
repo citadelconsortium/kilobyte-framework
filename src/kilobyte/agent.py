@@ -63,6 +63,12 @@ _PUNT_TAILS: tuple[str, ...] = (
     "checking now",
     "researching now",
     "investigating now",
+    "i'll handle it",
+    "i will handle it",
+    "i'll handle that",
+    "i have the tools",
+    "i've got the tools",
+    "on it, sir",
 )
 
 _INLINE_TOOL_BLOCK_RE = re.compile(
@@ -167,6 +173,8 @@ def _parse_inline_tool_calls(
     clean = _INLINE_TOOL_BLOCK_RE.sub("", content)
     clean = _INLINE_JSON_TOOL_BLOCK_RE.sub("", clean).strip()
     if saw_markup and not calls and not rejected:
+        # Malformed markup is never safe user-facing prose. Keep only the explanation
+        # before its first tool marker so raw protocol syntax cannot reach a client.
         marker = _INLINE_MARKER_RE.search(clean)
         clean = clean[: marker.start()].strip() if marker else clean
     return clean, calls, rejected, saw_markup
@@ -190,6 +198,34 @@ def _looks_like_punt(content: str | None) -> bool:
 
 def _looks_like_false_capability_denial(content: str | None) -> bool:
     return bool(content and _FALSE_CAPABILITY_DENIAL_RE.search(content))
+
+
+# Address normalisation. The brain is told to open and close by addressing Sir, and the
+# framework guarantees it. But the model, the prompt and the framework can each add a "Sir",
+# which stacks into "Sir, Sir, ..." and trailing "..., Sir. Kilo, Sir." The rule is exactly
+# one "Sir," at the very start and one ", Sir." at the very end — never doubled, and never a
+# reprinted self-name sign-off. These strip the model's own leading/trailing address so the
+# framework can re-add a single clean one.
+_LEAD_SIR_RE = re.compile(r"^\s*(?:sir\b\s*[,.:;–—-]?\s*)+", re.IGNORECASE)
+_TRAIL_NAME_RE = re.compile(r"[\s,;.–—-]*\b(?:kilo|kilobyte)\b[\s.!,]*$", re.IGNORECASE)
+_TRAIL_SIR_RE = re.compile(r"(?:[\s,;.]*\bsir\b\s*[.!]?)+\s*$", re.IGNORECASE)
+
+
+def _strip_leading_sir(text: str) -> str:
+    """Remove the model's own opening 'Sir'(s) so a single one can be prepended."""
+    return _LEAD_SIR_RE.sub("", text, count=1)
+
+
+def _strip_trailing_flourish(text: str) -> str:
+    """Remove a trailing reprinted name ('… Kilo.') and any trailing 'Sir'(s) so a single
+    ', Sir.' can be appended. Loops because the two can interleave ('…, Sir. Kilo, Sir.')."""
+    previous = None
+    out = text
+    while previous != out:
+        previous = out
+        out = _TRAIL_SIR_RE.sub("", out)
+        out = _TRAIL_NAME_RE.sub("", out)
+    return out.rstrip()
 
 
 class Agent:
@@ -467,6 +503,9 @@ class Agent:
                         pending_content += content
                         marker = _INLINE_MARKER_RE.search(pending_content)
                         if marker:
+                            # A provider has put its tool protocol in the text channel.
+                            # Retract any preamble from buffered clients and suppress the
+                            # protocol while it is recovered after the stream completes.
                             inline_markup = True
                             pending_content = ""
                             if emitted_this_step:
@@ -480,10 +519,11 @@ class Agent:
                         pending_content = pending_content[-_STREAM_GUARD_CHARS:]
                         if not sir_started and visible.strip():
                             sir_started = True
-                            if not visible.lstrip()[:3].lower().startswith("sir"):
-                                yield {"type": "token", "text": "Sir, "}
+                            visible = _strip_leading_sir(visible)
+                            yield {"type": "token", "text": "Sir, "}
                         emitted_this_step = True
-                        yield {"type": "token", "text": visible}
+                        if visible:
+                            yield {"type": "token", "text": visible}
                     for call in delta.get("tool_calls") or []:
                         index = int(call.get("index", 0))
                         target = calls.setdefault(
@@ -505,10 +545,14 @@ class Agent:
             if pending_content and not inline_markup:
                 if not sir_started and pending_content.strip():
                     sir_started = True
-                    if not pending_content.lstrip()[:3].lower().startswith("sir"):
-                        yield {"type": "token", "text": "Sir, "}
-                emitted_this_step = True
-                yield {"type": "token", "text": pending_content}
+                    pending_content = _strip_leading_sir(pending_content)
+                    yield {"type": "token", "text": "Sir, "}
+                # This is the last text chunk (held back by the stream guard). Strip a
+                # reprinted name / trailing 'Sir' here so the final block adds exactly one.
+                pending_content = _strip_trailing_flourish(pending_content)
+                if pending_content:
+                    emitted_this_step = True
+                    yield {"type": "token", "text": pending_content}
 
             content = "".join(content_parts)
             tool_calls = [calls[index] for index in sorted(calls)]
@@ -681,13 +725,15 @@ class Agent:
                     self.memory.add_message(session_id, "assistant", failure)
                     yield {"type": "done", "session_id": session_id, "task_failed": True}
                     return
-                final = content or ""
-                if final.strip() and not final.lstrip()[:3].lower().startswith("sir"):
-                    final = "Sir, " + final.lstrip()
-                _tail = final.rstrip().rstrip(".!?\u2026 ").rstrip()
-                if _tail and not _tail.lower().endswith("sir"):
+                # Exactly one opening 'Sir,' and one closing ', Sir.' \u2014 no doubles, no
+                # reprinted name. This mirrors what the stream emitted (leading Sir stripped
+                # then re-added; trailing flourish stripped in the guard-buffer flush above).
+                body = _strip_trailing_flourish(_strip_leading_sir(content or "")).strip()
+                if body:
                     yield {"type": "token", "text": ", Sir."}
-                    final = final.rstrip() + ", Sir."
+                    final = "Sir, " + body + ", Sir."
+                else:
+                    final = "Sir."
                 self.memory.add_message(session_id, "assistant", final)
                 yield {"type": "done", "session_id": session_id, "usage": usage or {}}
                 return
