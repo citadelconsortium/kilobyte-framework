@@ -3,7 +3,7 @@
 What Kilobyte contains, what has been added, and the reasoning behind the decisions that
 are not obvious from the code.
 
-Framework version 1.13.6 · brain-free distribution (operator-supplied GGUF or explicit
+Framework version 1.14.0 · brain-free distribution (operator-supplied GGUF or explicit
 cloud provider).
 
 ## What is in it
@@ -17,9 +17,9 @@ adapters, no model picker, no automatic cloud fallback. Optional, explicit cloud
 **Front ends.** An animated terminal TUI, and an optional Telegram bridge. Both talk to the
 same daemon over a Unix socket and share one loaded model with separate conversations.
 
-**Tools.** Thirteen, all verified end to end: `read_file`, `write_file`, `list_files`,
+**Tools.** Fourteen, all verified end to end: `read_file`, `write_file`, `list_files`,
 `search_files`, `run_command`, `system_info`, `web_search`, `web_fetch`, `remember`,
-`recall`, `save_skill`, `list_skills`, `search_history`. MCP servers can add more. The tool
+`recall`, `save_skill`, `list_skills`, `search_history`, `reference`. MCP servers can add more. The tool
 set is deliberately **stable** (never routed per request) so the prompt prefix stays
 cacheable.
 
@@ -39,6 +39,19 @@ and a stricter read-only policy for anything arriving remotely.
 installer that provisions dependencies, the service user, the model and the service.
 
 ## Changes and why
+
+### 1.14.0: stronger-brain compatibility and compact one-box work output
+
+The framework's model-building path now renders native assistant function calls and tool
+results, with a fixed raw-GGUF gate plus an isolated real-framework RPC acceptance suite.
+The framework repository remains brain-free; it is tested with the companion
+`kilobyte-4.1-3b-q4_k_m.gguf` release but never downloads or bundles that model.
+
+The established single Kilo TUI box remains intact. Live work is compacted into `Ran`,
+`Explored`, `Wrote`, and `Used` rows with nested bounded results; leading model whitespace
+is discarded after every tool event, and fenced code receives language-aware Pygments
+colour without changing the box. `kilo status` refreshes detected total and available RAM
+on every request while preserving the runtime's actual active context and thread settings.
 
 ### 1.13.6: Telegram machine tools with in-chat approval
 
