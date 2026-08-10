@@ -13,7 +13,7 @@ from kaggle_run import authenticate, download, wait
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("--username", default="oversightnode"); parser.add_argument("--training-kernel", default="oversightnode/kilobyte-train"); parser.add_argument("--slug", default="kilobyte-convert"); parser.add_argument("--out", type=Path, default=Path("output/conversion")); parser.add_argument("--no-wait", action="store_true"); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument("--username", default="oversightnode"); parser.add_argument("--training-kernel", default="oversightnode/kilobyte-train"); parser.add_argument("--slug", default="kilobyte-gguf-convert"); parser.add_argument("--out", type=Path, default=Path("output/conversion")); parser.add_argument("--no-wait", action="store_true"); args = parser.parse_args()
     api = authenticate(); ref = f"{args.username}/{args.slug}"
     with tempfile.TemporaryDirectory() as raw:
         staging = Path(raw); shutil.copy2(Path(__file__).with_name("convert_kaggle.py"), staging / "kilobyte-convert.py")
