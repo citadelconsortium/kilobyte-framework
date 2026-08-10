@@ -3,8 +3,8 @@
   "_base_model_note": "New 3B Apache-2.0 base selected for Kilo: native function calling, strong instruction following and code capability, while Q4_K_M remains viable on the 4 GB CPU-only VM.",
   "max_seq_len": 4096,
   "lora": {
-    "r": 32,
-    "alpha": 32,
+    "r": 16,
+    "alpha": 16,
     "dropout": 0.0,
     "target_modules": [
       "q_proj",
@@ -17,8 +17,8 @@
     ]
   },
   "train": {
-    "epochs": 3,
-    "learning_rate": 0.0001,
+    "epochs": 1,
+    "learning_rate": 0.00005,
     "warmup_ratio": 0.03,
     "weight_decay": 0.01,
     "lr_scheduler": "cosine",

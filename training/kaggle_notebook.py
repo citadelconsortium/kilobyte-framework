@@ -2,7 +2,7 @@
 """Kilobyte training notebook — runs on a Kaggle GPU session.
 
 The model may be attached as a Kaggle model input or downloaded from its official model
-repository when notebook internet is enabled. A LoRA adapter keeps the 3B run within a
+repository when notebook internet is enabled.  A LoRA adapter keeps the 3B run within a
 single Kaggle GPU while preserving the base model's general reasoning.
 
 GGUF conversion is deliberately not done here — it needs llama.cpp, which needs internet
@@ -92,7 +92,12 @@ TOOL_SCHEMAS = [
 
 
 def _conversation_to_messages(conv: dict) -> list[dict]:
-    """Convert the dataset spec to native OpenAI function-call messages."""
+    """Convert the dataset spec to native OpenAI function-call messages.
+
+    The old pipeline flattened calls into assistant text.  That directly encouraged a
+    model to print tool JSON in chat.  Native calls let each model's own chat template
+    emit the exact tokens that llama.cpp parses back into framework tool calls.
+    """
     messages = []
     pending_ids: list[tuple[str, str]] = []
     call_number = 0
@@ -105,7 +110,11 @@ def _conversation_to_messages(conv: dict) -> list[dict]:
                 call_id = f"call_{call_number}"
                 call_number += 1
                 pending_ids.append((call_id, call["name"]))
-                converted.append({"id": call_id, "type": "function", "function": {"name": call["name"], "arguments": call["arguments"]}})
+                converted.append({
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": call["name"], "arguments": call["arguments"]},
+                })
             messages.append({"role": role, "content": content, "tool_calls": converted})
             continue
         if role == "tool":
@@ -117,9 +126,15 @@ def _conversation_to_messages(conv: dict) -> list[dict]:
 
 
 def render_examples(path: Path, tokenizer, max_len: int) -> "list[dict]":
-    """Render each conversation to text via the chat template, then tokenise the whole
-    sequence. Robust across tokenizer versions: the template is rendered to a string
-    first, then tokenised once, rather than per turn."""
+    """Render native tool conversations and train only on assistant output.
+
+    Granite's template has no Jinja ``generation`` block, so Transformers cannot return
+    an assistant mask. Falling back to labels for the whole conversation teaches the model
+    to predict user prompts and tool results and caused measurable capability regression.
+    Derive exact assistant spans from the same native template instead: the generation
+    prefix marks where each assistant answer starts, and the through-message rendering
+    marks where it ends.
+    """
     rows = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -127,23 +142,40 @@ def render_examples(path: Path, tokenizer, max_len: int) -> "list[dict]":
             continue
         conv = json.loads(line)
         messages = _conversation_to_messages(conv)
-        template = tokenizer.chat_template or ""
         template_args = {
             "tools": TOOL_SCHEMAS, "tokenize": True, "add_generation_prompt": False,
             "truncation": True, "max_length": max_len, "return_dict": True,
         }
-        if "{% generation" in template:
-            template_args["return_assistant_tokens_mask"] = True
         rendered = tokenizer.apply_chat_template(messages, **template_args)
         ids = rendered["input_ids"]
         if ids and isinstance(ids[0], list):
             ids = ids[0]
-        mask = rendered.get("assistant_masks") or rendered.get("assistant_tokens_mask")
-        if mask and isinstance(mask[0], list):
-            mask = mask[0]
         if ids:
-            labels = [token if keep else -100 for token, keep in zip(ids, mask)] if mask and any(mask) else list(ids)
-            rows.append({"input_ids": list(ids), "labels": labels})
+            ids = list(ids)
+            labels = [-100] * len(ids)
+            for index, message in enumerate(messages):
+                if message["role"] != "assistant":
+                    continue
+                before_rendered = tokenizer.apply_chat_template(
+                    messages[:index], tools=TOOL_SCHEMAS, tokenize=True,
+                    add_generation_prompt=True, return_dict=True,
+                )
+                through_rendered = tokenizer.apply_chat_template(
+                    messages[:index + 1], tools=TOOL_SCHEMAS, tokenize=True,
+                    add_generation_prompt=False, return_dict=True,
+                )
+                before = before_rendered["input_ids"]
+                through = through_rendered["input_ids"]
+                if before and isinstance(before[0], list):
+                    before = before[0]
+                if through and isinstance(through[0], list):
+                    through = through[0]
+                start, end = len(before), min(len(through), len(ids))
+                if list(through[:end]) != ids[:end] or start >= end:
+                    raise ValueError(f"chat template assistant span mismatch in {conv.get('id', 'unknown')}")
+                labels[start:end] = ids[start:end]
+            if any(label != -100 for label in labels):
+                rows.append({"input_ids": ids, "labels": labels})
     return rows
 
 
