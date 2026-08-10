@@ -15,6 +15,14 @@ from __future__ import annotations
 
 import re
 
+try:
+    from pygments import highlight
+    from pygments.formatters import Terminal256Formatter
+    from pygments.lexers import TextLexer, get_lexer_by_name
+    from pygments.util import ClassNotFound
+except ImportError:  # pragma: no cover
+    highlight = None
+
 from .theme import BOLD, CYAN, DIM, GREEN, GREY, RESET
 
 
@@ -45,19 +53,38 @@ class MarkdownStream:
     def __init__(self) -> None:
         self._buffer = ""
         self._in_code = False
+        self._code_language = ""
+        self._code_lines: list[str] = []
+        self._started = False
 
-    def _format_line(self, line: str) -> str:
+    def _render_code(self) -> str:
+        code = "\n".join(self._code_lines)
+        self._code_lines = []
+        if highlight is None:
+            return f"{CYAN}{code}{RESET}"
+        try:
+            lexer = get_lexer_by_name(self._code_language) if self._code_language else TextLexer()
+        except ClassNotFound:
+            lexer = TextLexer()
+        return highlight(code, lexer, Terminal256Formatter(style="monokai")).rstrip("\n")
+
+    def _format_line(self, line: str) -> str | None:
         fence = _FENCE.match(line)
         if fence is not None:
             if not self._in_code:
                 self._in_code = True
                 lang = fence.group(1)
+                self._code_language = lang
+                self._code_lines = []
                 return f"{GREY}┄┄ {lang or 'code'} " + "┄" * max(0, 40 - len(lang)) + RESET
+            rendered = self._render_code()
             self._in_code = False
-            return f"{GREY}{'┄' * 46}{RESET}"
+            self._code_language = ""
+            close = f"{GREY}{'┄' * 46}{RESET}"
+            return f"{rendered}\n{close}" if rendered else close
         if self._in_code:
-            # Code is shown verbatim in a distinct colour, never Markdown-processed.
-            return f"{CYAN}{line}{RESET}"
+            self._code_lines.append(line)
+            return None
         heading = _HEADING.match(line)
         if heading is not None:
             return f"{BOLD}{GREEN}{heading.group(2)}{RESET}"
@@ -76,13 +103,29 @@ class MarkdownStream:
         out: list[str] = []
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
-            out.append(self._format_line(line))
+            if not self._started and not self._in_code and not line.strip():
+                continue
+            formatted = self._format_line(line)
+            if formatted is not None:
+                out.append(formatted)
+                self._started = True
         return "\n".join(out) + ("\n" if out else "")
 
     def flush(self) -> str:
         if not self._buffer:
+            if self._in_code and self._code_lines:
+                rendered = self._render_code()
+                self._in_code = False
+                return rendered
             return ""
         # A trailing partial line: format what is there. In a code block it is shown raw.
         line = self._buffer
         self._buffer = ""
-        return self._format_line(line) if not self._in_code else f"{CYAN}{line}{RESET}"
+        if not self._started and not self._in_code and not line.strip():
+            return ""
+        if self._in_code:
+            self._code_lines.append(line)
+            rendered = self._render_code()
+            self._in_code = False
+            return rendered
+        return self._format_line(line) or ""

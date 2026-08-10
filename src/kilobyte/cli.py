@@ -70,7 +70,8 @@ def print_status(status: dict[str, Any] | None) -> None:
         f"{profile.get('context_size', '?')} context · {profile.get('gpu_layers', 0)} GPU layers"
     )
     print(
-        f"{'memory':<12} {profile.get('available_mb', '?')} MiB available · "
+        f"{'memory':<12} {profile.get('total_mb', '?')} MiB total · "
+        f"{profile.get('available_mb', '?')} MiB available · "
         f"{memory.get('sessions', 0)} sessions · {memory.get('facts', 0)} facts · "
         f"{memory.get('skills', 0)} skills"
     )

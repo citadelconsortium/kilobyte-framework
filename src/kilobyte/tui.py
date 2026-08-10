@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .activity import format_arguments, format_summary
+from .activity import format_arguments, format_result_lines
 from .render import MarkdownStream
 from .rpc import RPCClient
 from .theme import (
@@ -194,6 +194,18 @@ class TerminalUI:
         """Prefix every line of already-formatted text with the panel border."""
         return text.replace("\n", f"\n{GREEN}{Box.v}{RESET} ")
 
+    @staticmethod
+    def _activity_heading(name: str, arguments: dict[str, Any]) -> tuple[str, str]:
+        if name == "run_command":
+            return "Ran", str(arguments.get("command") or name)
+        if name == "write_file":
+            return "Wrote", str(arguments.get("path") or name)
+        if name in {"read_file", "list_files", "search_files", "web_search", "web_fetch", "reference", "recall", "search_history", "list_skills", "system_info"}:
+            detail = arguments.get("path") or arguments.get("query") or arguments.get("url") or name
+            return "Explored", str(detail)
+        detail = format_arguments(arguments, 500)
+        return "Used", f"{name}{(' ' + detail) if detail else ''}"
+
     async def ask(self, text: str) -> None:
         reader, writer = await asyncio.open_unix_connection(self.client.socket_path)
         request: dict[str, Any] = {"command": "chat", "text": text, "session_id": self.session_id, "cwd": str(Path.cwd()), "fresh": self.fresh_session}
@@ -256,7 +268,6 @@ class TerminalUI:
                     emit(markdown.flush())
                     if not at_line_start:
                         sys.stdout.write("\n")
-                    print(f"\r\033[2K{GREEN}{Box.v}{RESET} {TOOL} {DIM}intercepted model tool markup; dispatching safely{RESET}")
                     markdown = MarkdownStream()
                     printed = False
                     at_line_start = True
@@ -264,20 +275,25 @@ class TerminalUI:
                     emit(markdown.flush())
                     if not at_line_start:
                         sys.stdout.write("\n")
+                    # A tool result begins a new assistant continuation. Reset the
+                    # leading-whitespace state so blank prefixes do not become spacer rows.
+                    markdown = MarkdownStream()
                     tool_started = time.monotonic()
                     tools_used.append(event["name"])
                     state["phase"] = f"running {event['name']}"
                     state["streaming"] = False
-                    detail = format_arguments(event.get("arguments") or {}, 700)
-                    sys.stdout.write(f"\r\033[2K{GREEN}{Box.v}{RESET} {TOOL} {BOLD}{event['name']}{RESET}{(' ' + DIM + detail + RESET) if detail else ''}\n")
+                    verb, detail = self._activity_heading(event["name"], event.get("arguments") or {})
+                    sys.stdout.write(f"\r\033[2K{GREEN}{Box.v}{RESET} {TOOL} {BOLD}{verb}{RESET} {CYAN}{detail}{RESET}\n")
                     sys.stdout.flush()
                     printed = False
                     at_line_start = True
                 elif kind == "tool_end":
                     took = time.monotonic() - tool_started
                     icon = OK if event.get("ok") else WARN
-                    summary = format_summary(event.get("summary", ""), 700)
-                    print(f"\r\033[2K{GREEN}{Box.v}{RESET}   {icon} {DIM}{event['name']} · {took:0.1f}s · {summary}{RESET}")
+                    lines = format_result_lines(event.get("summary", ""))
+                    for index, line in enumerate(lines):
+                        branch = "└" if index == len(lines) - 1 else "│"
+                        sys.stdout.write(f"\r\033[2K{GREEN}{Box.v}{RESET}   {icon if index == 0 else ' '} {DIM}{branch} {line}{RESET}\n")
                     state["phase"] = "interpreting result"
                     state["streaming"] = False
                     printed = False

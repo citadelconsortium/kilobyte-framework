@@ -262,6 +262,17 @@ class LlamaRuntime:
 
     def status(self) -> dict[str, Any]:
         running = bool(self.process and self.process.returncode is None)
+        # Context/threads describe the running server and must remain the values selected
+        # at start-up.  Memory is inherently live, though: returning the start-up snapshot
+        # made `kilo status` appear to ignore VM RAM changes and current pressure.
+        profile = self.profile.to_dict() if self.profile else None
+        if profile is not None:
+            live = self.resources.profile()
+            profile.update(
+                total_mb=live.total_mb,
+                available_mb=live.available_mb,
+                safe_available_mb=live.safe_available_mb,
+            )
         return {
             "running": running,
             "pid": self.process.pid if running and self.process else None,
@@ -269,5 +280,5 @@ class LlamaRuntime:
             "uptime_seconds": int(time.monotonic() - self.started_at) if running and self.started_at else 0,
             "model": str(self.settings.model_path),
             "warming": self.warming,
-            "profile": self.profile.to_dict() if self.profile else None,
+            "profile": profile,
         }

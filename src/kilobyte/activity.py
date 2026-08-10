@@ -58,3 +58,39 @@ def format_arguments(arguments: dict[str, Any] | None, limit: int = 600) -> str:
 
 def format_summary(summary: Any, limit: int = 600) -> str:
     return redact_text(summary, limit)
+
+
+def format_result_lines(summary: Any, limit: int = 2400, max_lines: int = 14) -> list[str]:
+    """Turn a tool result into compact transcript lines without empty spacer rows."""
+    value = summary
+    if isinstance(summary, str):
+        try:
+            value = json.loads(summary)
+        except (json.JSONDecodeError, TypeError):
+            value = summary
+    if isinstance(value, dict):
+        streams = []
+        for key in ("stdout", "stderr", "content", "error"):
+            if value.get(key):
+                streams.append(str(value[key]))
+        text = "\n".join(streams) if streams else json.dumps(value, ensure_ascii=False)
+    elif isinstance(value, (list, tuple)):
+        text = json.dumps(value, ensure_ascii=False)
+    else:
+        text = str(value)
+    clean = [redact_text(line.rstrip(), limit) for line in text.splitlines() if line.strip()]
+    if not clean:
+        clean = ["completed"]
+    if len(clean) > max_lines:
+        hidden = len(clean) - max_lines
+        clean = clean[:max_lines] + [f"… +{hidden} lines"]
+    total = 0
+    bounded: list[str] = []
+    for line in clean:
+        remaining = limit - total
+        if remaining <= 0:
+            bounded.append("… output truncated")
+            break
+        bounded.append(line[:remaining])
+        total += len(bounded[-1])
+    return bounded

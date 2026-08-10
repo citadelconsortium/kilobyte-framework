@@ -34,6 +34,10 @@ class PanelRenderTests(unittest.TestCase):
         for corner in (Box.tl, Box.tr, Box.bl, Box.br):
             self.assertIn(corner, text)
 
+    def test_activity_headings_match_operator_transcript(self):
+        self.assertEqual(self.ui._activity_heading("run_command", {"command": "free -m"}), ("Ran", "free -m"))
+        self.assertEqual(self.ui._activity_heading("read_file", {"path": "README.md"}), ("Explored", "README.md"))
+
 
 if __name__ == "__main__":
     unittest.main()

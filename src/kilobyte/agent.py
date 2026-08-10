@@ -737,7 +737,7 @@ class Agent:
                         "type": "tool_end",
                         "name": name,
                         "ok": True,
-                        "summary": json.dumps(result, ensure_ascii=False)[:500],
+                        "summary": json.dumps(result, ensure_ascii=False)[:4000],
                     }
                     successful_tools.add(name)
                 except Exception as exc:

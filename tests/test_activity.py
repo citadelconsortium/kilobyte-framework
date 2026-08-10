@@ -1,6 +1,6 @@
 import unittest
 
-from kilobyte.activity import format_arguments, format_summary
+from kilobyte.activity import format_arguments, format_result_lines, format_summary
 
 
 class ActivityRenderingTests(unittest.TestCase):
@@ -16,6 +16,10 @@ class ActivityRenderingTests(unittest.TestCase):
         self.assertNotIn("abcdefghijklmnop", text)
         self.assertNotIn("ABCDEFGHIJKLMNOPQRSTUVWXYZ", text)
         self.assertIn("[redacted", text)
+
+    def test_command_output_becomes_compact_nonblank_transcript_lines(self):
+        lines = format_result_lines('{"stdout":"one\\n\\ntwo\\n"}')
+        self.assertEqual(lines, ["one", "two"])
 
 
 if __name__ == "__main__":

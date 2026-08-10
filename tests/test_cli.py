@@ -30,7 +30,7 @@ class CLITests(unittest.TestCase):
                 "uptime_seconds": 125,
                 "model": "/models/kilobyte.gguf",
                 "warming": False,
-                "profile": {"threads": 2, "context_size": 8192, "gpu_layers": 0, "available_mb": 2048},
+                "profile": {"threads": 2, "context_size": 8192, "gpu_layers": 0, "total_mb": 4096, "available_mb": 2048},
                 "memory": {"sessions": 3, "facts": 4, "skills": 5},
             })
         text = output.getvalue()
@@ -39,6 +39,7 @@ class CLITests(unittest.TestCase):
         self.assertIn("daemon       ACTIVE  pid 42", text)
         self.assertIn("brain        HEALTHY  kilobyte.gguf", text)
         self.assertIn("uptime       2m 5s", text)
+        self.assertIn("memory       4096 MiB total · 2048 MiB available", text)
 
     def test_stopped_status_is_explicit(self):
         output = StringIO()
